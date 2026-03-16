@@ -1,7 +1,6 @@
 #importing the sqlalchemy library
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker   
+from sqlalchemy.orm import declarative_base, sessionmaker   
 from .util import settings
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.DATABASE_USER}:{settings.DATABASE_PASSWORD}@{settings.DATABASE_HOST}:{settings.DATABASE_PORT}/{settings.DATABASE_NAME}"

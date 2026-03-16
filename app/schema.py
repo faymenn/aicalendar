@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 from datetime import datetime
 from typing import Optional
 
@@ -12,8 +12,7 @@ class TaskBase(BaseModel):
     location: str
     created_at: datetime
     updated_at: Optional[datetime] = None
-    class Config:
-        orm_mode = True #this is used to convert the sqlalchemy model to a pydantic model
+    model_config = ConfigDict(from_attributes=True)
 
 class TaskCreate(TaskBase):
     pass
@@ -29,8 +28,7 @@ class TaskResponse(TaskBase):
 class UserBase(BaseModel):
     email: EmailStr
     password: str
-    class Config:
-        orm_mode = True #this is used to convert the sqlalchemy model to a pydantic model
+    model_config = ConfigDict(from_attributes=True)
 
 class UserCreate(UserBase):
     pass
