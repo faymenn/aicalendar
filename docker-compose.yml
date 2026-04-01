@@ -1,8 +1,7 @@
-version: '3.8'
 services:
   app:
     container_name: aicalendar-app-prod  
-    build: .
+    image: aicalendar-app
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
