@@ -1,7 +1,7 @@
 services:
   app:
     container_name: aicalendar-app-prod  
-    image: aicalendar-app
+    image: faymenn/aitodolist:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"

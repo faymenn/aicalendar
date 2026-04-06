@@ -2,7 +2,7 @@ name: Build and Deploy
 on: push
 
 jobs:
-  build-and-deploy:
+  build:
     environment: 
       name: Testing
     env:
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -58,7 +58,7 @@ jobs:
 
       - name: Build and push Docker image
         id: docker_build
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v7
         with:
           context: ./
           file: ./Dockerfile
@@ -70,3 +70,20 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+  deploy:
+    environment: 
+      name: Production
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to AWS EC2
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_INSTANCE_IP }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SECRET_KEY }}
+          script: |
+            cd /home/ec2-user/aicalendar
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist:latest
+            docker compose down
+            docker compose up -d
