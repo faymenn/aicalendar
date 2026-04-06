@@ -3,27 +3,25 @@ from datetime import datetime
 from typing import Optional
 
 class TaskBase(BaseModel):
-    id: int
     title: str
-    description: str
-    completed: bool
-    start_time: datetime
-    end_time: datetime
-    location: str
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    description: Optional[str] = None
+    completed: bool = False
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    location: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class TaskCreate(TaskBase):
-    pass
+    created_at: datetime = datetime.now()
+    updated_at: Optional[datetime] = None
+    
 
 class TaskResponse(TaskBase):
-    title: str
-    description: str
-    completed: bool
-    start_time: datetime
-    end_time: datetime
-    location: str
+    id: int
+    owner_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
 
 class UserBase(BaseModel):
     email: EmailStr

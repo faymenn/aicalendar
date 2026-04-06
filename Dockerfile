@@ -16,4 +16,5 @@ COPY . .
 #expose the port 8000
 EXPOSE 8000 
 
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000"] #run the gunicorn server
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000"] 
+#run the gunicorn server
