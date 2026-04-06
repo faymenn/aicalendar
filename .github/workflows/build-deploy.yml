@@ -43,5 +43,5 @@ jobs:
         run: pip install -r requirements.deploy.txt
       - name: test with pytest
         run: |
-          pip install pytest
+          pip install pytest httpx
           pytest
