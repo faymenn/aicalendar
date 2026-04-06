@@ -1,0 +1,49 @@
+name: Build and Deploy
+on: push
+
+jobs:
+  build-and-deploy:
+    environment: 
+      name: Testing
+    env:
+      DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_USER: ${{ secrets.DATABASE_USER }}
+      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      ALGORITHM: ${{ secrets.ALGORITHM }}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ${{ secrets.DATABASE_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.DATABASE_NAME }}_test
+        ports:
+          - 5432:5432
+        options:
+          --health-cmd: pg_isready
+          --health-interval: 10s
+          --health-timeout: 5s
+          --health-retries: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: update pip
+        run: pip install --upgrade pip
+      - name: Install dependencies
+        run: pip install -r requirements.deploy.txt
+      - name: test with pytest
+        run: |
+          pip install pytest
+          pytest
+      - name: Build and deploy to AWS EC2
+        run: ssh ec2-user@<ec2-instance-ip> "docker pull aicalendar-app && docker stop aicalendar-app && docker run -d --name aicalendar-app -p 8000:8000 aicalendar-app"
