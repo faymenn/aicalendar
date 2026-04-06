@@ -1,5 +1,5 @@
 #Contains utility functions for the application
-from passlib.context import CryptContext
+import bcrypt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -16,10 +16,14 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") #this is used to hash the password
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-def hash_password(password: str):
-    return pwd_context.hash(password) #this is used to hash the password
-
-def verify_password(password: str, hashed_password: str):
-    return pwd_context.verify(password, hashed_password) #this is used to verify the password
+def verify_password(password: str, hashed_password: str) -> bool:
+    try:
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
+        return False
