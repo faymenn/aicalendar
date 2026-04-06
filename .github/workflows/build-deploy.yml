@@ -45,5 +45,3 @@ jobs:
         run: |
           pip install pytest
           pytest
-      - name: Build and deploy to AWS EC2
-        run: ssh ec2-user@<ec2-instance-ip> "docker pull aicalendar-app && docker stop aicalendar-app && docker run -d --name aicalendar-app -p 8000:8000 aicalendar-app"
