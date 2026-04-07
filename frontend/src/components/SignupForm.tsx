@@ -18,7 +18,7 @@ export default function SignupForm() {
     setMessage("");
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/users`, {
+      const response = await fetch(`${getApiBaseUrl()}/users/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
