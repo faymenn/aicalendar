@@ -57,7 +57,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build and push Docker image
-        id: docker_build
+        id: docker_build_backend
         uses: docker/build-push-action@v7
         with:
           context: ./
@@ -68,8 +68,22 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      - name: Build and push frontend Docker image
+        id: docker_build_frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist-frontend:latest
+          cache-from: type=local,src=/tmp/.buildx-cache-frontend
+          cache-to: type=local,dest=/tmp/.buildx-cache-frontend
+
+      - name: Image digests
+        run: |
+          echo Backend: ${{ steps.docker_build_backend.outputs.digest }}
+          echo Frontend: ${{ steps.docker_build_frontend.outputs.digest }}
   deploy:
     environment: 
       name: Production
@@ -85,5 +99,6 @@ jobs:
           script: |
             cd /home/ec2-user/aicalendar
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist:latest
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist-frontend:latest
             docker compose down
             docker compose up -d

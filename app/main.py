@@ -6,7 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()  # creating a fastapi instance
 
-origins = ["https://www.google.com", "https://www.youtube.com"] #list of origins that are allowed to access the API
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "https://whatdowhen.com",
+    "https://www.whatdowhen.com",
+]  # list of origins that are allowed to access the API
 
 app.add_middleware(        #Middleware acts as a middleman for the requests and responses
     CORSMiddleware,

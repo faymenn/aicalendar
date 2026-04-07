@@ -1,9 +1,21 @@
 services:
   app:
-    container_name: aicalendar-app-prod  
+    container_name: aicalendar-app-prod
     image: faymenn/aitodolist:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:8000:8000"
     env_file:
       - .env
+
+  frontend:
+    container_name: aicalendar-frontend-prod
+    image: faymenn/aitodolist-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      - INTERNAL_API_URL=http://app:8000
+      - NEXT_PUBLIC_API_BASE_URL=/api
+    ports:
+      - "80:3000"

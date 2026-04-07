@@ -1,0 +1,557 @@
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --panel-border: #000000;
+}
+
+html {
+  height: 100%;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100%;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.landingWrapper {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(420px, 1.35fr) minmax(280px, 0.65fr);
+}
+
+.brandPanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+
+.brandTitle {
+  font-size: clamp(2.75rem, 8vw, 7rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.formPanel,
+.authPageWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.authPageWrapper {
+  min-height: 100vh;
+  border-left: none;
+}
+
+.authForm {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.formTitle {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.inputLabel {
+  font-size: 0.95rem;
+}
+
+.inputField {
+  width: 100%;
+  border: 1px solid #000000;
+  border-radius: 0;
+  padding: 0.75rem 0.8rem;
+  font-size: 1rem;
+  background: #ffffff;
+  color: #000000;
+}
+
+.inputField:focus {
+  outline: 2px solid #000000;
+  outline-offset: 0;
+}
+
+.primaryButton {
+  margin-top: 0.5rem;
+  border: 1px solid #000000;
+  background: #000000;
+  color: #ffffff;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.textLink {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+  text-decoration: underline;
+}
+
+.statusMessage {
+  margin-top: 0.6rem;
+  font-size: 0.95rem;
+}
+
+.statusMessage.error {
+  font-weight: 600;
+}
+
+.tasksPage {
+  min-height: 100vh;
+  width: min(980px, 100%);
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+}
+
+.tasksPageTitle {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.tasksPageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #000000;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.7rem;
+}
+
+.logoutButton {
+  border: 0;
+  background: transparent;
+  color: #000000;
+  font-size: 0.9rem;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.logoutButton:hover {
+  text-decoration: underline;
+}
+
+.tasksContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.dateSection {
+  border-bottom: 1px solid #e8e8e8;
+  padding-bottom: 0.45rem;
+}
+
+.dateSection.noDivider {
+  border-bottom: 0;
+  padding-bottom: 0.2rem;
+}
+
+.dateBanner {
+  width: 100%;
+  border: 0;
+  background: #ffffff;
+  color: #000000;
+  text-align: left;
+  display: block;
+  align-items: center;
+  padding: 0.85rem 0.95rem;
+  cursor: pointer;
+}
+
+.dateBanner.muted {
+  color: #8b8b8b;
+}
+
+.dateLabel {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.dateLabel.muted {
+  color: #8b8b8b;
+}
+
+.dateTasks {
+  margin-top: 0.2rem;
+  border-top: 1px solid #e8e8e8;
+}
+
+.quickAddForm {
+  padding: 0.35rem 0.95rem 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.quickAddComposer {
+  padding-top: 0.15rem;
+}
+
+.quickAddTopRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.quickAddMainForm {
+  flex: 1;
+  min-width: 0;
+  padding-right: 0;
+}
+
+.quickAddLocationSlot {
+  margin-left: auto;
+  min-width: 180px;
+  text-align: right;
+  padding-right: 0.25rem;
+}
+
+.quickAddInput {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #000000;
+  padding: 0.25rem 0;
+  font-size: 1rem;
+}
+
+.quickAddInput:focus {
+  outline: none;
+}
+
+.quickAddPlus {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.quickAddMetaLocationInput {
+  margin-left: 0;
+  margin-top: 0;
+}
+
+.quickAddDescriptionRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.95rem 0.55rem 2rem;
+}
+
+.missingDatesToggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #8a8a8a;
+  display: block;
+  position: relative;
+  padding: 0.55rem 0.4rem 0.5rem;
+  cursor: pointer;
+}
+
+.missingDatesToggleText {
+  display: inline-block;
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0 0.45rem;
+  background: #ffffff;
+  position: relative;
+  z-index: 1;
+}
+
+.missingDatesToggleHint {
+  display: none;
+}
+
+.missingDatesToggle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 52%;
+  height: 1px;
+  background: #e0e0e0;
+}
+
+.missingDatesToggle:hover .missingDatesToggleText {
+  color: #6f6f6f;
+}
+
+.taskRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.95rem;
+}
+
+.taskItem + .taskItem {
+  border-top: 1px solid #ececec;
+}
+
+.taskDragWrapper.isDragging {
+  opacity: 0.45;
+}
+
+.dropIndicatorLine {
+  height: 0;
+  border-top: 2px solid #000000;
+  margin: 0.1rem 0.95rem;
+  position: relative;
+}
+
+.dropIndicatorLine::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: -4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #000000;
+}
+
+.taskMain {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex: 1;
+}
+
+.taskMainLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.taskTextGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.taskCompleteButton {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid #8f8f8f;
+  background: #ffffff;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 0.02rem;
+  flex-shrink: 0;
+}
+
+.taskDragHandle {
+  border: 0;
+  background: transparent;
+  color: #9a9a9a;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0;
+  margin-top: 0.02rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.taskDragHandle:active {
+  cursor: pointer;
+}
+
+.taskCompleteCheck {
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.taskCompleteButton:hover .taskCompleteCheck {
+  opacity: 1;
+  color: #6f6f6f;
+}
+
+.taskTitleButton {
+  border: 0;
+  background: transparent;
+  color: #000000;
+  font-size: 1rem;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+
+.taskTitleButton:focus-visible {
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+}
+
+.taskTime {
+  font-size: 0.85rem;
+  color: #555555;
+  min-width: 3.4rem;
+  line-height: 1.35;
+  margin-top: 0.08rem;
+  flex-shrink: 0;
+}
+
+.taskDetails {
+  border-top: 1px solid #e8e8e8;
+  padding: 0.8rem 0.95rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.taskTextarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.taskDescriptionPreview {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.86rem;
+  color: #666666;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.taskLocation {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #666666;
+  line-height: 1.35;
+  white-space: nowrap;
+  margin-left: 0.8rem;
+  margin-top: 0.08rem;
+  flex-shrink: 0;
+}
+
+.taskMetaGhostButton {
+  border: 0;
+  background: transparent;
+  color: #7a7a7a;
+  font-size: 0.85rem;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.taskLocationGhost {
+  margin-left: 0.8rem;
+  margin-top: 0.08rem;
+  flex-shrink: 0;
+}
+
+.taskMetaInlineInput {
+  border: 0;
+  background: transparent;
+  color: #000000;
+  padding: 0;
+  font-size: 0.85rem;
+  min-width: 140px;
+}
+
+.taskMetaInlineInput:focus {
+  outline: none;
+}
+
+.taskLocationInput {
+  margin-left: 0.8rem;
+  margin-top: 0.02rem;
+}
+
+.taskTitleInlineInput {
+  font-size: 1rem;
+  line-height: 1.35;
+  min-width: 220px;
+}
+
+.miniButton {
+  border: 1px solid #000000;
+  background: #000000;
+  color: #ffffff;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.miniButton.secondary {
+  background: #ffffff;
+  color: #000000;
+}
+
+.miniButton:focus-visible,
+.taskCompleteButton:focus-visible {
+  outline: 2px solid #000000;
+  outline-offset: 2px;
+}
+
+.emptyText {
+  padding: 0.75rem 0.95rem;
+  font-size: 0.95rem;
+}
+
+.scrollSentinel {
+  width: 100%;
+  height: 10px;
+}
+
+.lastTaskDayTrigger {
+  width: 100%;
+  height: 1px;
+}
