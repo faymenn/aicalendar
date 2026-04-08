@@ -97,6 +97,12 @@ function createDateRangeKeys(startKey: string, endKey: string) {
   );
 }
 
+function hasDateToken(input: string) {
+  return /\b(today|tomorrow|sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|\d{4}-\d{2}-\d{2}|\d{1,2}(st|nd|rd|th)\s+(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)|(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+\d{1,2}(st|nd|rd|th)?)\b/i.test(
+    input,
+  );
+}
+
 type DateRenderEntry =
   | { type: "date"; dateKey: string; hasTasks: boolean }
   | { type: "gap"; rangeKey: string; startKey: string; endKey: string }
@@ -111,6 +117,7 @@ export default function TasksPage() {
   const [futureDayCount, setFutureDayCount] = useState(0);
   const [hasReachedLastTaskDay, setHasReachedLastTaskDay] = useState(false);
   const [showFutureDays, setShowFutureDays] = useState(true);
+  const [showPastDays, setShowPastDays] = useState(false);
   const [expandedMissingRanges, setExpandedMissingRanges] = useState<
     Record<string, boolean>
   >({});
@@ -251,6 +258,15 @@ export default function TasksPage() {
     },
     [orderByBucket],
   );
+  const pastScheduledKeys = useMemo(
+    () =>
+      Object.keys(grouped.byDate)
+        .filter(
+          (dateKey) => dateKey < todayKey && (grouped.byDate[dateKey]?.length ?? 0) > 0,
+        )
+        .sort(),
+    [grouped.byDate, todayKey],
+  );
   const scheduledKeys = useMemo(
     () =>
       Object.keys(grouped.byDate)
@@ -274,7 +290,7 @@ export default function TasksPage() {
     }
     setHasReachedLastTaskDay(true);
     setFutureDayCount(DAY_BATCH_SIZE);
-    setShowFutureDays(true);
+    setShowFutureDays(false);
   }, [lastScheduledDateKey]);
 
   const futureStartKey = useMemo(() => {
@@ -286,17 +302,31 @@ export default function TasksPage() {
 
   const dateEntries = useMemo<DateRenderEntry[]>(() => {
     if (!lastScheduledDateKey) {
-      const fallbackKeys = createFutureDateKeys(getStartOfDay(new Date()), futureDayCount);
-      return fallbackKeys.map((dateKey) => ({ type: "date", dateKey, hasTasks: false }));
+      const entries: DateRenderEntry[] = [
+        { type: "date", dateKey: todayKey, hasTasks: false },
+      ];
+      entries.push({ type: "futureToggle", startKey: todayKey });
+      if (showFutureDays && futureDayCount > 0) {
+        const fallbackKeys = createFutureDateKeys(
+          addDays(getStartOfDay(new Date()), 1),
+          futureDayCount,
+        );
+        fallbackKeys.forEach((dateKey) => {
+          entries.push({ type: "date", dateKey, hasTasks: false });
+        });
+      }
+      return entries;
     }
 
     const start = addDays(fromDateKey(lastScheduledDateKey), 1);
     const futureKeys = createFutureDateKeys(start, futureDayCount);
     const entries: DateRenderEntry[] = [];
+    const timelineKeys =
+      scheduledKeys[0] === todayKey ? scheduledKeys : [todayKey, ...scheduledKeys];
 
-    scheduledKeys.forEach((dateKey, index) => {
+    timelineKeys.forEach((dateKey, index) => {
       if (index > 0) {
-        const prevKey = scheduledKeys[index - 1];
+        const prevKey = timelineKeys[index - 1];
         const gapDays = dateDiffInDays(prevKey, dateKey) - 1;
         if (gapDays > 0) {
           const gapStart = formatDateKey(addDays(fromDateKey(prevKey), 1));
@@ -315,7 +345,11 @@ export default function TasksPage() {
           }
         }
       }
-      entries.push({ type: "date", dateKey, hasTasks: true });
+      entries.push({
+        type: "date",
+        dateKey,
+        hasTasks: (grouped.byDate[dateKey]?.length ?? 0) > 0,
+      });
     });
 
     if (futureStartKey && futureDayCount > 0) {
@@ -332,7 +366,9 @@ export default function TasksPage() {
     expandedMissingRanges,
     futureDayCount,
     futureStartKey,
+    grouped.byDate,
     lastScheduledDateKey,
+    todayKey,
     scheduledKeys,
     showFutureDays,
   ]);
@@ -585,7 +621,8 @@ export default function TasksPage() {
 
   async function handleCreateUnscheduledTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsed = parseTaskInput(newUnscheduledTask);
+    const rawInput = newUnscheduledTask;
+    const parsed = parseTaskInput(rawInput);
     if (!parsed.title) {
       return;
     }
@@ -597,7 +634,7 @@ export default function TasksPage() {
       const location = newUnscheduledLocation.trim();
       const created = await createTask({
         title: parsed.title,
-        start_time: parsed.startTime,
+        start_time: hasDateToken(rawInput) ? parsed.startTime : null,
         description: description || null,
         location: location || null,
       });
@@ -617,8 +654,8 @@ export default function TasksPage() {
     }
   }
 
-  const showUnscheduledComposerMeta =
-    activeComposer === "unscheduled" ||
+  const showTopComposerMeta =
+    activeComposer === "top" ||
     newUnscheduledTask.trim() !== "" ||
     newUnscheduledDescription.trim() !== "" ||
     newUnscheduledLocation.trim() !== "" ||
@@ -629,6 +666,228 @@ export default function TasksPage() {
   function handleLogout() {
     localStorage.removeItem("auth_token");
     router.push("/");
+  }
+
+  function getDateLabel(dateKey: string) {
+    const base = formatDateLabelFromKey(dateKey);
+    return dateKey === todayKey ? `${base} - Today` : base;
+  }
+
+  function renderDateBucket(
+    dateKey: string,
+    hasTasks: boolean,
+    suppressBottomDivider: boolean,
+    strikethroughLabel = false,
+  ) {
+    const dateTasks = getBucketTasks(dateKey);
+    const composerKey = `date:${dateKey}`;
+    const showComposerMeta =
+      activeComposer === composerKey ||
+      (newTaskByDate[dateKey] ?? "").trim() !== "" ||
+      (newDescriptionByDate[dateKey] ?? "").trim() !== "" ||
+      (newLocationByDate[dateKey] ?? "").trim() !== "" ||
+      isEditingDescriptionByDate[dateKey] ||
+      isEditingLocationByDate[dateKey];
+
+    return (
+      <DateSection
+        key={dateKey}
+        label={getDateLabel(dateKey)}
+        defaultOpen={dateTasks.length > 0}
+        muted={!hasTasks}
+        suppressBottomDivider={suppressBottomDivider}
+        strikethroughLabel={strikethroughLabel}
+        onBannerDragOver={(event) => {
+          if (!dragState) {
+            return;
+          }
+          event.preventDefault();
+          setDropIndicatorIfChanged(dateKey, dateTasks.length);
+        }}
+        onBannerDrop={(event) => {
+          event.preventDefault();
+          void handleTaskDrop(dateKey, dateTasks.length);
+        }}
+      >
+        <div className="quickAddComposer">
+          <div className="quickAddTopRow">
+            <form
+              className="quickAddForm quickAddMainForm"
+              onSubmit={(event) => void handleCreateTaskForDate(event, dateKey)}
+            >
+              <span className="quickAddPlus">+</span>
+              <input
+                className="quickAddInput"
+                value={newTaskByDate[dateKey] ?? ""}
+                onChange={(event) =>
+                  setNewTaskByDate((prev) => ({
+                    ...prev,
+                    [dateKey]: event.target.value,
+                  }))
+                }
+                onFocus={() => setActiveComposer(composerKey)}
+                onBlur={() => {
+                  setTimeout(() => {
+                    const shouldKeepOpen =
+                      (newTaskByDate[dateKey] ?? "").trim() !== "" ||
+                      (newDescriptionByDate[dateKey] ?? "").trim() !== "" ||
+                      (newLocationByDate[dateKey] ?? "").trim() !== "" ||
+                      !!isEditingDescriptionByDate[dateKey] ||
+                      !!isEditingLocationByDate[dateKey];
+                    if (!shouldKeepOpen) {
+                      setActiveComposer((prev) => (prev === composerKey ? null : prev));
+                    }
+                  }, 120);
+                }}
+                placeholder="Add task"
+              />
+            </form>
+            {showComposerMeta && (
+              <div className="quickAddLocationSlot">
+                {isEditingLocationByDate[dateKey] ||
+                (newLocationByDate[dateKey] ?? "").trim() !== "" ? (
+                  <input
+                    className="taskMetaInlineInput quickAddMetaLocationInput"
+                    value={newLocationByDate[dateKey] ?? ""}
+                    onChange={(event) =>
+                      setNewLocationByDate((prev) => ({
+                        ...prev,
+                        [dateKey]: event.target.value,
+                      }))
+                    }
+                    onBlur={() => {
+                      if (!(newLocationByDate[dateKey] ?? "").trim()) {
+                        setIsEditingLocationByDate((prev) => ({
+                          ...prev,
+                          [dateKey]: false,
+                        }));
+                      }
+                    }}
+                    placeholder="Add location"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="taskMetaGhostButton taskLocationGhost"
+                    onClick={() =>
+                      setIsEditingLocationByDate((prev) => ({
+                        ...prev,
+                        [dateKey]: true,
+                      }))
+                    }
+                  >
+                    Add location
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {showComposerMeta && (
+          <div className="quickAddDescriptionRow">
+            {isEditingDescriptionByDate[dateKey] ||
+            (newDescriptionByDate[dateKey] ?? "").trim() !== "" ? (
+              <input
+                className="taskMetaInlineInput"
+                value={newDescriptionByDate[dateKey] ?? ""}
+                onChange={(event) =>
+                  setNewDescriptionByDate((prev) => ({
+                    ...prev,
+                    [dateKey]: event.target.value,
+                  }))
+                }
+                onBlur={() => {
+                  if (!(newDescriptionByDate[dateKey] ?? "").trim()) {
+                    setIsEditingDescriptionByDate((prev) => ({
+                      ...prev,
+                      [dateKey]: false,
+                    }));
+                  }
+                }}
+                placeholder="Add description"
+              />
+            ) : (
+              <button
+                type="button"
+                className="taskMetaGhostButton"
+                onClick={() =>
+                  setIsEditingDescriptionByDate((prev) => ({
+                    ...prev,
+                    [dateKey]: true,
+                  }))
+                }
+              >
+                Add description
+              </button>
+            )}
+          </div>
+        )}
+        {createErrorByDate[dateKey] && (
+          <p className="statusMessage error">{createErrorByDate[dateKey]}</p>
+        )}
+
+        {creatingDateKey === dateKey && <p className="statusMessage">Creating task...</p>}
+
+        <div
+          onDragOver={(event) => {
+            if (!dragState) {
+              return;
+            }
+            event.preventDefault();
+            setDropIndicatorIfChanged(dateKey, dateTasks.length);
+          }}
+          onDrop={() => void handleTaskDrop(dateKey, dateTasks.length)}
+        >
+          {dateTasks.length > 0 &&
+            dateTasks.map((task, index) => (
+              <div key={task.id}>
+                {dropIndicator?.bucket === dateKey && dropIndicator.index === index && (
+                  <div className="dropIndicatorLine" />
+                )}
+                <div
+                  className={
+                    dragState?.taskId === task.id
+                      ? "taskDragWrapper isDragging"
+                      : "taskDragWrapper"
+                  }
+                  draggable={dragReadyTaskId === task.id && !editingTaskIds[task.id]}
+                  onDragStart={() => handleTaskDragStart(task, dateKey)}
+                  onDragEnd={() => {
+                    setDragState(null);
+                    setDragReadyTaskId(null);
+                    setDropIndicator(null);
+                  }}
+                  onDragOver={(event) => {
+                    event.stopPropagation();
+                    handleTaskRowDragOver(event, dateKey, index);
+                  }}
+                  onDrop={(event) => {
+                    event.stopPropagation();
+                    void handleTaskDrop(
+                      dateKey,
+                      dropIndicator?.bucket === dateKey ? dropIndicator.index : index,
+                    );
+                  }}
+                >
+                  <TaskItem
+                    task={task}
+                    onSave={handleTaskSave}
+                    onDelete={handleTaskDelete}
+                    onComplete={handleTaskComplete}
+                    onDragHandleMouseDown={() => setDragReadyTaskId(task.id)}
+                    onEditStateChange={handleEditStateChange}
+                    forceShowMeta={newlyAddedTaskId === task.id}
+                  />
+                </div>
+              </div>
+            ))}
+          {dropIndicator?.bucket === dateKey && dropIndicator.index === dateTasks.length && (
+            <div className="dropIndicatorLine" />
+          )}
+        </div>
+        {dateKey === lastScheduledDateKey && <div ref={lastTaskDayTriggerRef} className="lastTaskDayTrigger" />}
+      </DateSection>
+    );
   }
 
   return (
@@ -644,114 +903,119 @@ export default function TasksPage() {
 
       {!isLoading && !error && (
         <div className="tasksContainer">
-          <DateSection label="Unscheduled" defaultOpen>
-            <div className="quickAddComposer">
-              <div className="quickAddTopRow">
-                <form
-                  className="quickAddForm quickAddMainForm"
-                  onSubmit={(event) => void handleCreateUnscheduledTask(event)}
-                >
-                  <span className="quickAddPlus">+</span>
-                  <input
-                    className="quickAddInput"
-                    value={newUnscheduledTask}
-                    onChange={(event) => setNewUnscheduledTask(event.target.value)}
-                    onFocus={() => setActiveComposer("unscheduled")}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        const shouldKeepOpen =
-                          newUnscheduledTask.trim() !== "" ||
-                          newUnscheduledDescription.trim() !== "" ||
-                          newUnscheduledLocation.trim() !== "" ||
-                          isEditingUnscheduledDescription ||
-                          isEditingUnscheduledLocation;
-                        if (!shouldKeepOpen) {
-                          setActiveComposer((prev) =>
-                            prev === "unscheduled" ? null : prev,
-                          );
-                        }
-                      }, 120);
-                    }}
-                    placeholder="Add task"
-                  />
-                </form>
-                {showUnscheduledComposerMeta && (
-                  <div className="quickAddLocationSlot">
-                    {isEditingUnscheduledLocation ||
-                    newUnscheduledLocation.trim() !== "" ? (
-                      <input
-                        className="taskMetaInlineInput quickAddMetaLocationInput"
-                        value={newUnscheduledLocation}
-                        onChange={(event) =>
-                          setNewUnscheduledLocation(event.target.value)
-                        }
-                        onBlur={() => {
-                          if (!newUnscheduledLocation.trim()) {
-                            setIsEditingUnscheduledLocation(false);
-                          }
-                        }}
-                        placeholder="Add location"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="taskMetaGhostButton taskLocationGhost"
-                        onClick={() => setIsEditingUnscheduledLocation(true)}
-                      >
-                        Add location
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            {showUnscheduledComposerMeta && (
-              <div className="quickAddDescriptionRow">
-                {isEditingUnscheduledDescription ||
-                newUnscheduledDescription.trim() !== "" ? (
-                  <input
-                    className="taskMetaInlineInput"
-                    value={newUnscheduledDescription}
-                    onChange={(event) =>
-                      setNewUnscheduledDescription(event.target.value)
-                    }
-                    onBlur={() => {
-                      if (!newUnscheduledDescription.trim()) {
-                        setIsEditingUnscheduledDescription(false);
-                      }
-                    }}
-                    placeholder="Add description"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="taskMetaGhostButton"
-                    onClick={() => setIsEditingUnscheduledDescription(true)}
-                  >
-                    Add description
-                  </button>
-                )}
-              </div>
-            )}
-            {unscheduledCreateError && (
-              <p className="statusMessage error">{unscheduledCreateError}</p>
-            )}
-            {isCreatingUnscheduled && (
-              <p className="statusMessage">Creating task...</p>
-            )}
-
-            {unscheduledTasks.length > 0 ? (
-              <div
-                onDragOver={(event) => {
-                  if (!dragState) {
-                    return;
-                  }
-                  event.preventDefault();
-                  setDropIndicatorIfChanged("unscheduled", unscheduledTasks.length);
-                }}
-                onDrop={() => void handleTaskDrop("unscheduled", unscheduledTasks.length)}
+          <div className="quickAddComposer">
+            <div className="quickAddTopRow">
+              <form
+                className="quickAddForm quickAddMainForm"
+                onSubmit={(event) => void handleCreateUnscheduledTask(event)}
               >
-                {unscheduledTasks.map((task, index) => (
+                <span className="quickAddPlus">+</span>
+                <input
+                  className="quickAddInput"
+                  value={newUnscheduledTask}
+                  onChange={(event) => setNewUnscheduledTask(event.target.value)}
+                  onFocus={() => setActiveComposer("top")}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      const shouldKeepOpen =
+                        newUnscheduledTask.trim() !== "" ||
+                        newUnscheduledDescription.trim() !== "" ||
+                        newUnscheduledLocation.trim() !== "" ||
+                        isEditingUnscheduledDescription ||
+                        isEditingUnscheduledLocation;
+                      if (!shouldKeepOpen) {
+                        setActiveComposer((prev) => (prev === "top" ? null : prev));
+                      }
+                    }, 120);
+                  }}
+                  placeholder="Add task"
+                />
+              </form>
+              {showTopComposerMeta && (
+                <div className="quickAddLocationSlot">
+                  {isEditingUnscheduledLocation || newUnscheduledLocation.trim() !== "" ? (
+                    <input
+                      className="taskMetaInlineInput quickAddMetaLocationInput"
+                      value={newUnscheduledLocation}
+                      onChange={(event) => setNewUnscheduledLocation(event.target.value)}
+                      onBlur={() => {
+                        if (!newUnscheduledLocation.trim()) {
+                          setIsEditingUnscheduledLocation(false);
+                        }
+                      }}
+                      placeholder="Add location"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="taskMetaGhostButton taskLocationGhost"
+                      onClick={() => setIsEditingUnscheduledLocation(true)}
+                    >
+                      Add location
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {showTopComposerMeta && (
+            <div className="quickAddDescriptionRow">
+              {isEditingUnscheduledDescription || newUnscheduledDescription.trim() !== "" ? (
+                <input
+                  className="taskMetaInlineInput"
+                  value={newUnscheduledDescription}
+                  onChange={(event) => setNewUnscheduledDescription(event.target.value)}
+                  onBlur={() => {
+                    if (!newUnscheduledDescription.trim()) {
+                      setIsEditingUnscheduledDescription(false);
+                    }
+                  }}
+                  placeholder="Add description"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="taskMetaGhostButton"
+                  onClick={() => setIsEditingUnscheduledDescription(true)}
+                >
+                  Add description
+                </button>
+              )}
+            </div>
+          )}
+          {unscheduledCreateError && (
+            <p className="statusMessage error">{unscheduledCreateError}</p>
+          )}
+          {isCreatingUnscheduled && <p className="statusMessage">Creating task...</p>}
+
+          <DateSection
+            label="Unscheduled"
+            defaultOpen
+            suppressBottomDivider={pastScheduledKeys.length > 0}
+            onBannerDragOver={(event) => {
+              if (!dragState) {
+                return;
+              }
+              event.preventDefault();
+              setDropIndicatorIfChanged("unscheduled", unscheduledTasks.length);
+            }}
+            onBannerDrop={(event) => {
+              event.preventDefault();
+              void handleTaskDrop("unscheduled", unscheduledTasks.length);
+            }}
+          >
+            <div
+              onDragOver={(event) => {
+                if (!dragState) {
+                  return;
+                }
+                event.preventDefault();
+                setDropIndicatorIfChanged("unscheduled", unscheduledTasks.length);
+              }}
+              onDrop={() => void handleTaskDrop("unscheduled", unscheduledTasks.length)}
+            >
+              {unscheduledTasks.length > 0 &&
+                unscheduledTasks.map((task, index) => (
                   <div key={task.id}>
                     {dropIndicator?.bucket === "unscheduled" &&
                       dropIndicator.index === index && <div className="dropIndicatorLine" />}
@@ -798,13 +1062,26 @@ export default function TasksPage() {
                     </div>
                   </div>
                 ))}
-                {dropIndicator?.bucket === "unscheduled" &&
-                  dropIndicator.index === unscheduledTasks.length && (
-                    <div className="dropIndicatorLine" />
-                  )}
-              </div>
-            ) : null}
+              {dropIndicator?.bucket === "unscheduled" &&
+                dropIndicator.index === unscheduledTasks.length && (
+                  <div className="dropIndicatorLine" />
+                )}
+            </div>
           </DateSection>
+
+          {pastScheduledKeys.length > 0 && (
+            <button
+              type="button"
+              className="missingDatesToggle"
+              onClick={() => setShowPastDays((prev) => !prev)}
+            >
+              <span className="missingDatesToggleText">past</span>
+            </button>
+          )}
+          {showPastDays &&
+            pastScheduledKeys.map((dateKey) =>
+              renderDateBucket(dateKey, true, false, true),
+            )}
 
           {dateEntries.map((entry, index) => {
             if (entry.type === "gap") {
@@ -846,220 +1123,12 @@ export default function TasksPage() {
                 </button>
               );
             }
-
             const { dateKey } = entry;
-            const dateTasks = getBucketTasks(dateKey);
-            const composerKey = `date:${dateKey}`;
             const nextEntry = dateEntries[index + 1];
-            const showComposerMeta =
-              activeComposer === composerKey ||
-              (newTaskByDate[dateKey] ?? "").trim() !== "" ||
-              (newDescriptionByDate[dateKey] ?? "").trim() !== "" ||
-              (newLocationByDate[dateKey] ?? "").trim() !== "" ||
-              isEditingDescriptionByDate[dateKey] ||
-              isEditingLocationByDate[dateKey];
-            return (
-              <DateSection
-                key={dateKey}
-                label={formatDateLabelFromKey(dateKey)}
-                defaultOpen={dateTasks.length > 0}
-                muted={!entry.hasTasks}
-                suppressBottomDivider={
-                  nextEntry?.type === "gap" || nextEntry?.type === "futureToggle"
-                }
-              >
-                <div className="quickAddComposer">
-                  <div className="quickAddTopRow">
-                    <form
-                      className="quickAddForm quickAddMainForm"
-                      onSubmit={(event) => void handleCreateTaskForDate(event, dateKey)}
-                    >
-                      <span className="quickAddPlus">+</span>
-                      <input
-                        className="quickAddInput"
-                        value={newTaskByDate[dateKey] ?? ""}
-                        onChange={(event) =>
-                          setNewTaskByDate((prev) => ({
-                            ...prev,
-                            [dateKey]: event.target.value,
-                          }))
-                        }
-                        onFocus={() => setActiveComposer(composerKey)}
-                        onBlur={() => {
-                          setTimeout(() => {
-                            const shouldKeepOpen =
-                              (newTaskByDate[dateKey] ?? "").trim() !== "" ||
-                              (newDescriptionByDate[dateKey] ?? "").trim() !== "" ||
-                              (newLocationByDate[dateKey] ?? "").trim() !== "" ||
-                              !!isEditingDescriptionByDate[dateKey] ||
-                              !!isEditingLocationByDate[dateKey];
-                            if (!shouldKeepOpen) {
-                              setActiveComposer((prev) =>
-                                prev === composerKey ? null : prev,
-                              );
-                            }
-                          }, 120);
-                        }}
-                        placeholder="Add task"
-                      />
-                    </form>
-                    {showComposerMeta && (
-                      <div className="quickAddLocationSlot">
-                        {isEditingLocationByDate[dateKey] ||
-                        (newLocationByDate[dateKey] ?? "").trim() !== "" ? (
-                          <input
-                            className="taskMetaInlineInput quickAddMetaLocationInput"
-                            value={newLocationByDate[dateKey] ?? ""}
-                            onChange={(event) =>
-                              setNewLocationByDate((prev) => ({
-                                ...prev,
-                                [dateKey]: event.target.value,
-                              }))
-                            }
-                            onBlur={() => {
-                              if (!(newLocationByDate[dateKey] ?? "").trim()) {
-                                setIsEditingLocationByDate((prev) => ({
-                                  ...prev,
-                                  [dateKey]: false,
-                                }));
-                              }
-                            }}
-                            placeholder="Add location"
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            className="taskMetaGhostButton taskLocationGhost"
-                            onClick={() =>
-                              setIsEditingLocationByDate((prev) => ({
-                                ...prev,
-                                [dateKey]: true,
-                              }))
-                            }
-                          >
-                            Add location
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {showComposerMeta && (
-                  <div className="quickAddDescriptionRow">
-                    {isEditingDescriptionByDate[dateKey] ||
-                    (newDescriptionByDate[dateKey] ?? "").trim() !== "" ? (
-                      <input
-                        className="taskMetaInlineInput"
-                        value={newDescriptionByDate[dateKey] ?? ""}
-                        onChange={(event) =>
-                          setNewDescriptionByDate((prev) => ({
-                            ...prev,
-                            [dateKey]: event.target.value,
-                          }))
-                        }
-                        onBlur={() => {
-                          if (!(newDescriptionByDate[dateKey] ?? "").trim()) {
-                            setIsEditingDescriptionByDate((prev) => ({
-                              ...prev,
-                              [dateKey]: false,
-                            }));
-                          }
-                        }}
-                        placeholder="Add description"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="taskMetaGhostButton"
-                        onClick={() =>
-                          setIsEditingDescriptionByDate((prev) => ({
-                            ...prev,
-                            [dateKey]: true,
-                          }))
-                        }
-                      >
-                        Add description
-                      </button>
-                    )}
-                  </div>
-                )}
-                {createErrorByDate[dateKey] && (
-                  <p className="statusMessage error">{createErrorByDate[dateKey]}</p>
-                )}
-
-                {creatingDateKey === dateKey && (
-                  <p className="statusMessage">Creating task...</p>
-                )}
-
-                <div
-                  onDragOver={(event) => {
-                    if (!dragState) {
-                      return;
-                    }
-                    event.preventDefault();
-                    setDropIndicatorIfChanged(dateKey, dateTasks.length);
-                  }}
-                  onDrop={() => void handleTaskDrop(dateKey, dateTasks.length)}
-                >
-                  {dateTasks.length > 0 &&
-                    dateTasks.map((task, index) => (
-                      <div key={task.id}>
-                        {dropIndicator?.bucket === dateKey &&
-                          dropIndicator.index === index && (
-                            <div className="dropIndicatorLine" />
-                          )}
-                        <div
-                          className={
-                            dragState?.taskId === task.id
-                              ? "taskDragWrapper isDragging"
-                              : "taskDragWrapper"
-                          }
-                          draggable={
-                            dragReadyTaskId === task.id && !editingTaskIds[task.id]
-                          }
-                          onDragStart={() => handleTaskDragStart(task, dateKey)}
-                          onDragEnd={() => {
-                            setDragState(null);
-                            setDragReadyTaskId(null);
-                            setDropIndicator(null);
-                          }}
-                          onDragOver={(event) =>
-                            {
-                              event.stopPropagation();
-                              handleTaskRowDragOver(event, dateKey, index);
-                            }
-                          }
-                          onDrop={(event) => {
-                            event.stopPropagation();
-                            void handleTaskDrop(
-                              dateKey,
-                              dropIndicator?.bucket === dateKey
-                                ? dropIndicator.index
-                                : index,
-                            );
-                          }}
-                        >
-                          <TaskItem
-                            task={task}
-                            onSave={handleTaskSave}
-                            onDelete={handleTaskDelete}
-                            onComplete={handleTaskComplete}
-                            onDragHandleMouseDown={() => setDragReadyTaskId(task.id)}
-                            onEditStateChange={handleEditStateChange}
-                            forceShowMeta={newlyAddedTaskId === task.id}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  {dropIndicator?.bucket === dateKey &&
-                    dropIndicator.index === dateTasks.length && (
-                      <div className="dropIndicatorLine" />
-                    )}
-                </div>
-                {dateKey === lastScheduledDateKey && (
-                  <div ref={lastTaskDayTriggerRef} className="lastTaskDayTrigger" />
-                )}
-              </DateSection>
+            return renderDateBucket(
+              dateKey,
+              entry.hasTasks,
+              nextEntry?.type === "gap" || nextEntry?.type === "futureToggle",
             );
           })}
 

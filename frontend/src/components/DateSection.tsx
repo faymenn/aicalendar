@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { DragEvent, useState } from "react";
 
 type DateSectionProps = {
   label: string;
@@ -8,6 +8,9 @@ type DateSectionProps = {
   defaultOpen?: boolean;
   muted?: boolean;
   suppressBottomDivider?: boolean;
+  strikethroughLabel?: boolean;
+  onBannerDragOver?: (event: DragEvent<HTMLButtonElement>) => void;
+  onBannerDrop?: (event: DragEvent<HTMLButtonElement>) => void;
 };
 
 export default function DateSection({
@@ -16,6 +19,9 @@ export default function DateSection({
   defaultOpen = true,
   muted = false,
   suppressBottomDivider = false,
+  strikethroughLabel = false,
+  onBannerDragOver,
+  onBannerDrop,
 }: DateSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const superscriptLabel = formatLabelWithSuperscript(label);
@@ -26,8 +32,18 @@ export default function DateSection({
         type="button"
         className={muted ? "dateBanner muted" : "dateBanner"}
         onClick={() => setIsOpen((prev) => !prev)}
+        onDragOver={onBannerDragOver}
+        onDrop={onBannerDrop}
       >
-        <span className={muted ? "dateLabel muted" : "dateLabel"}>
+        <span
+          className={[
+            "dateLabel",
+            muted ? "muted" : "",
+            strikethroughLabel ? "pastTaskDate" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {superscriptLabel}
         </span>
       </button>
