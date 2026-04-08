@@ -28,7 +28,7 @@ export default function LoginForm({ compact = false }: LoginFormProps) {
     payload.append("password", password);
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/login`, {
+      const response = await fetch(`${getApiBaseUrl()}/login/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
