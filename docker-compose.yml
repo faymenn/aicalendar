@@ -15,7 +15,6 @@ services:
     depends_on:
       - app
     environment:
-      - INTERNAL_API_URL=http://app:8000
       - NEXT_PUBLIC_API_BASE_URL=/api
     ports:
       - "127.0.0.1:3000:3000"
