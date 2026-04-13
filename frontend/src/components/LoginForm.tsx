@@ -94,8 +94,8 @@ export default function LoginForm({ compact = false }: LoginFormProps) {
         {isLoading ? "Logging in..." : "Login"}
       </button>
 
-      <Link href="/signup" className="textLink">
-        New user
+      <Link href="/signup" className="textLink mutedTextLink">
+        Create account
       </Link>
 
       {message && (

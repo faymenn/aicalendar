@@ -98,6 +98,8 @@ jobs:
           key: ${{ secrets.EC2_SECRET_KEY }}
           script: |
             cd /home/ec2-user/aicalendar
+            docker image prune -af
+            docker builder prune -af
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist:latest
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist-frontend:latest
             docker compose down

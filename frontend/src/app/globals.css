@@ -86,17 +86,19 @@ a {
 
 .inputField {
   width: 100%;
-  border: 1px solid #000000;
+  border: 0;
+  border-bottom: 1px solid #b7b7b7;
   border-radius: 0;
-  padding: 0.75rem 0.8rem;
+  padding: 0.55rem 0;
   font-size: 1rem;
   background: #ffffff;
   color: #000000;
 }
 
 .inputField:focus {
-  outline: 2px solid #000000;
-  outline-offset: 0;
+  outline: none;
+  border-bottom-color: #000000;
+  border-bottom-width: 2px;
 }
 
 .primaryButton {
@@ -104,9 +106,19 @@ a {
   border: 1px solid #000000;
   background: #000000;
   color: #ffffff;
-  padding: 0.75rem 1rem;
+  padding: 0.72rem 1rem;
+  border-radius: 10px;
   font-size: 1rem;
   cursor: pointer;
+}
+
+.primaryButton::after {
+  content: "";
+}
+
+.primaryButton:hover {
+  background: #111111;
+  border-color: #111111;
 }
 
 .primaryButton:disabled {
@@ -118,6 +130,16 @@ a {
   display: inline-block;
   margin-top: 0.25rem;
   font-size: 0.95rem;
+  text-decoration: underline;
+}
+
+.mutedTextLink {
+  color: #7a7a7a;
+  text-decoration: none;
+}
+
+.mutedTextLink:hover {
+  color: #000000;
   text-decoration: underline;
 }
 
@@ -157,7 +179,7 @@ a {
 .logoutButton {
   border: 0;
   background: transparent;
-  color: #000000;
+  color: #7a7a7a;
   font-size: 0.9rem;
   padding: 0;
   cursor: pointer;
@@ -165,6 +187,7 @@ a {
 }
 
 .logoutButton:hover {
+  color: #000000;
   text-decoration: underline;
 }
 
@@ -578,4 +601,32 @@ a {
 .lastTaskDayTrigger {
   width: 100%;
   height: 1px;
+}
+
+@media (max-width: 600px) {
+  .landingWrapper {
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .brandPanel {
+    justify-content: flex-start;
+    padding: 2rem 1.25rem 0.75rem;
+  }
+
+  .brandTitle {
+    font-size: clamp(2.1rem, 12vw, 3.2rem);
+    line-height: 1.02;
+  }
+
+  .formPanel {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 0.25rem 1.25rem 2rem;
+  }
+
+  .formPanel .authForm {
+    max-width: none;
+  }
 }

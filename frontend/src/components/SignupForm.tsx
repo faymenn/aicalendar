@@ -82,7 +82,7 @@ export default function SignupForm() {
         {isLoading ? "Creating..." : "Create user"}
       </button>
 
-      <Link href="/" className="textLink">
+      <Link href="/" className="textLink mutedTextLink">
         Back to login
       </Link>
 
