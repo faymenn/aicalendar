@@ -13,15 +13,6 @@ export function formatDateKey(input: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function createDateKeysFromToday(dayCount: number) {
-  const start = getStartOfDay(new Date());
-  return Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return formatDateKey(date);
-  });
-}
-
 export function formatDateLabelFromKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
   const date = new Date(year, month - 1, day);
@@ -63,7 +54,15 @@ function getDateFromTask(task: Task) {
   return dateValue ? new Date(dateValue) : null;
 }
 
-function hasExplicitTime(dateValue: string | null) {
+export function getDateKeyFromTask(task: Task) {
+  const taskDate = getDateFromTask(task);
+  if (!taskDate) {
+    return undefined;
+  }
+  return formatDateKey(taskDate);
+}
+
+export function hasExplicitTime(dateValue: string | null) {
   if (!dateValue) {
     return false;
   }
@@ -73,7 +72,7 @@ function hasExplicitTime(dateValue: string | null) {
   );
 }
 
-function getComparableTimestamp(task: Task) {
+export function getComparableTimestamp(task: Task) {
   const value = task.start_time ?? task.end_time;
   if (!value) {
     return Number.MAX_SAFE_INTEGER;

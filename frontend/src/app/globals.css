@@ -112,10 +112,6 @@ a {
   cursor: pointer;
 }
 
-.primaryButton::after {
-  content: "";
-}
-
 .primaryButton:hover {
   background: #111111;
   border-color: #111111;

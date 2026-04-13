@@ -26,7 +26,7 @@ def get_all_tasks(db: Session = Depends(get_db), current_user: model.User = Depe
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schema.TaskResponse)
 def create_task(task: schema.TaskCreate, db: Session = Depends(get_db), current_user: model.User = Depends(get_current_user)):
-    new_task = model.Task(**task.dict(), owner_id=current_user.id)  #**task.dict() is used to convert the task object to a dictionary
+    new_task = model.Task(**task.model_dump(), owner_id=current_user.id)  #**task.model_dump() is used to convert the task object to a dictionary
     db.add(new_task)
     db.commit()
     db.refresh(new_task)

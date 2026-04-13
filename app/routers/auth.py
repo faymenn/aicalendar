@@ -42,7 +42,7 @@ def verify_token(token: str, credentials_exception):
 # the verify_token inputs the token and the credentials_exception. It decodes the token based on the SECRET_KEY and ALGORITHM.
 # It returns the user_id if the token is valid, otherwise it raises an exception.
 
-@router.get("/me", status_code=status.HTTP_200_OK)
+@router.get("/me", status_code=status.HTTP_200_OK, response_model=schema.UserResponse)
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
     token_data = verify_token(token, credentials_exception)

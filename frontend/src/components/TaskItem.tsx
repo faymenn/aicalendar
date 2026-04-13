@@ -8,7 +8,8 @@ import {
   useState,
 } from "react";
 import { Task, TaskUpdateInput } from "@/lib/api";
-import { parseTaskInput } from "@/lib/taskInputParser";
+import { hasSchedulingToken, parseTaskInput } from "@/lib/taskInputParser";
+import { getDateKeyFromTask } from "@/lib/tasks";
 
 type TaskItemProps = {
   task: Task;
@@ -22,24 +23,6 @@ type TaskItemProps = {
 
 function toInputValue(value: string | null) {
   return value ?? "";
-}
-
-function hasSchedulingToken(text: string) {
-  return /\b(today|tomorrow|sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|\d{4}-\d{2}-\d{2}|\d{1,2}(:\d{2})?\s*(am|pm)|\d{1,2}:\d{2})\b/i.test(
-    text,
-  );
-}
-
-function getDateKeyFromTask(task: Task) {
-  const value = task.start_time ?? task.end_time;
-  if (!value) {
-    return undefined;
-  }
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 export default function TaskItem({

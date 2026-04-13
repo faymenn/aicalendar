@@ -9,6 +9,10 @@ type ParsedTaskInput = {
   endTime: string | null;
 };
 
+const DATE_TOKEN_PATTERN =
+  /\b(today|tomorrow|sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|\d{4}-\d{2}-\d{2}|\d{1,2}(st|nd|rd|th)\s+(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)|(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+\d{1,2}(st|nd|rd|th)?)\b/i;
+const TIME_TOKEN_PATTERN = /\b(\d{1,2}(:\d{2})?\s*(am|pm)|\d{1,2}:\d{2})\b/i;
+
 const WEEKDAY_INDEX: Record<string, number> = {
   sun: 0,
   sunday: 0,
@@ -55,6 +59,14 @@ const MONTH_INDEX: Record<string, number> = {
   dec: 11,
   december: 11,
 };
+
+export function hasDateToken(input: string) {
+  return DATE_TOKEN_PATTERN.test(input);
+}
+
+export function hasSchedulingToken(input: string) {
+  return DATE_TOKEN_PATTERN.test(input) || TIME_TOKEN_PATTERN.test(input);
+}
 
 function toDateFromKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);

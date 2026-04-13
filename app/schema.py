@@ -25,15 +25,13 @@ class TaskResponse(TaskBase):
 
 class UserBase(BaseModel):
     email: EmailStr
-    password: str
     model_config = ConfigDict(from_attributes=True)
 
 class UserCreate(UserBase):
-    pass
+    password: str
 
 class UserResponse(UserBase):
     id: int
-    email: EmailStr
     
 class UserLogin(BaseModel):
     email: EmailStr

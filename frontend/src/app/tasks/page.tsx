@@ -27,10 +27,12 @@ import {
   formatDateKey,
   formatDateLabelFromKey,
   formatDateShortLabelFromKey,
+  getComparableTimestamp,
   groupTasks,
+  hasExplicitTime,
   getStartOfDay,
 } from "@/lib/tasks";
-import { parseTaskInput } from "@/lib/taskInputParser";
+import { hasDateToken, parseTaskInput } from "@/lib/taskInputParser";
 
 function fromDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -51,25 +53,6 @@ function createFutureDateKeys(startDate: Date, count: number) {
   return Array.from({ length: count }, (_, index) =>
     formatDateKey(addDays(start, index)),
   );
-}
-
-function taskHasExplicitTime(task: Task) {
-  const value = task.start_time ?? task.end_time;
-  if (!value) {
-    return false;
-  }
-  const date = new Date(value);
-  return (
-    date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0
-  );
-}
-
-function getTimeStamp(task: Task) {
-  const value = task.start_time ?? task.end_time;
-  if (!value) {
-    return Number.MAX_SAFE_INTEGER;
-  }
-  return new Date(value).getTime();
 }
 
 function moveId(ids: number[], fromIndex: number, toIndex: number) {
@@ -96,12 +79,6 @@ function createDateRangeKeys(startKey: string, endKey: string) {
   const start = fromDateKey(startKey);
   return Array.from({ length: total + 1 }, (_, index) =>
     formatDateKey(addDays(start, index)),
-  );
-}
-
-function hasDateToken(input: string) {
-  return /\b(today|tomorrow|sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|\d{4}-\d{2}-\d{2}|\d{1,2}(st|nd|rd|th)\s+(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)|(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+\d{1,2}(st|nd|rd|th)?)\b/i.test(
-    input,
   );
 }
 
@@ -291,11 +268,11 @@ export default function TasksPage() {
       }
 
       const timedSorted = preliminary
-        .filter((task) => taskHasExplicitTime(task))
-        .sort((a, b) => getTimeStamp(a) - getTimeStamp(b));
+        .filter((task) => hasExplicitTime(task.start_time) || hasExplicitTime(task.end_time))
+        .sort((a, b) => getComparableTimestamp(a) - getComparableTimestamp(b));
       let timedIndex = 0;
       return preliminary.map((task) => {
-        if (taskHasExplicitTime(task)) {
+        if (hasExplicitTime(task.start_time) || hasExplicitTime(task.end_time)) {
           const timedTask = timedSorted[timedIndex];
           timedIndex += 1;
           return timedTask;
@@ -454,7 +431,7 @@ export default function TasksPage() {
       setDragState({
         taskId: task.id,
         sourceBucket: bucketKey,
-        isTimed: taskHasExplicitTime(task),
+        isTimed: hasExplicitTime(task.start_time) || hasExplicitTime(task.end_time),
       });
     },
     [],

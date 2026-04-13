@@ -10,7 +10,7 @@ router = APIRouter(prefix="/users", tags=["users"])    #this is used to create a
 def create_user(user: schema.UserCreate, db: Session = Depends(get_db)):
     hashed_password = util.hash_password(user.password)  #this is used to hash the password
     user.password = hashed_password #this is used to update the password with the hashed password
-    new_user = model.User(**user.dict()) #this is used to create a new user
+    new_user = model.User(**user.model_dump()) #this is used to create a new user
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
