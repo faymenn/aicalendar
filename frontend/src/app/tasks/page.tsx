@@ -143,6 +143,12 @@ export default function TasksPage() {
   const lastTaskDayTriggerRef = useRef<HTMLDivElement | null>(null);
   const hasRedirectedForAuthRef = useRef(false);
 
+  const resetDragInteraction = useCallback(() => {
+    setDragState(null);
+    setDragReadyTaskId(null);
+    setDropIndicator(null);
+  }, []);
+
   const redirectToLogin = useCallback(() => {
     if (hasRedirectedForAuthRef.current) {
       return;
@@ -247,6 +253,38 @@ export default function TasksPage() {
     }, 5000);
     return () => clearTimeout(timer);
   }, [newlyAddedTaskId]);
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      setDragReadyTaskId(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        resetDragInteraction();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        resetDragInteraction();
+      }
+    };
+
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("dragend", resetDragInteraction);
+    window.addEventListener("drop", resetDragInteraction);
+    window.addEventListener("blur", resetDragInteraction);
+    window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("dragend", resetDragInteraction);
+      window.removeEventListener("drop", resetDragInteraction);
+      window.removeEventListener("blur", resetDragInteraction);
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [resetDragInteraction]);
 
   const grouped = useMemo(() => groupTasks(tasks), [tasks]);
   const todayKey = useMemo(() => formatDateKey(new Date()), []);
