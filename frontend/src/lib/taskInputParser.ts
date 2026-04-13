@@ -6,6 +6,7 @@ type ParseOptions = {
 type ParsedTaskInput = {
   title: string;
   startTime: string | null;
+  endTime: string | null;
 };
 
 const WEEKDAY_INDEX: Record<string, number> = {
@@ -99,7 +100,8 @@ export function parseTaskInput(
     options.defaultDateKey && /^\d{4}-\d{2}-\d{2}$/.test(options.defaultDateKey)
       ? toDateFromKey(options.defaultDateKey)
       : null;
-  let time = parseFallbackTime(options.fallbackTime);
+  let startClock = parseFallbackTime(options.fallbackTime);
+  let endClock: { hour: number; minute: number } | null = null;
 
   const isoDateMatch = input.match(/\b(\d{4}-\d{2}-\d{2})\b/i);
   if (isoDateMatch) {
@@ -170,51 +172,110 @@ export function parseTaskInput(
     }
   }
 
-  const ampmTimeMatch = input.match(/\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
-  if (ampmTimeMatch) {
-    let hour = Number(ampmTimeMatch[1]);
-    const minute = Number(ampmTimeMatch[2] ?? "0");
-    const period = ampmTimeMatch[3].toLowerCase();
-    if (period === "pm" && hour < 12) {
-      hour += 12;
-    }
-    if (period === "am" && hour === 12) {
-      hour = 0;
-    }
-    if (!Number.isNaN(hour) && !Number.isNaN(minute)) {
-      time = { hour, minute };
-      input = input.replace(ampmTimeMatch[0], " ").trim();
+  const ampmRangeMatch = input.match(
+    /\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*-\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i,
+  );
+  if (ampmRangeMatch) {
+    const firstHourRaw = Number(ampmRangeMatch[1]);
+    const firstMinute = Number(ampmRangeMatch[2] ?? "0");
+    const firstPeriod = ampmRangeMatch[3].toLowerCase();
+    const secondHourRaw = Number(ampmRangeMatch[4]);
+    const secondMinute = Number(ampmRangeMatch[5] ?? "0");
+    const secondPeriod = (ampmRangeMatch[6] ?? ampmRangeMatch[3]).toLowerCase();
+
+    const normalizeHour = (hour: number, period: string) => {
+      let normalized = hour;
+      if (period === "pm" && normalized < 12) {
+        normalized += 12;
+      }
+      if (period === "am" && normalized === 12) {
+        normalized = 0;
+      }
+      return normalized;
+    };
+
+    const firstHour = normalizeHour(firstHourRaw, firstPeriod);
+    const secondHour = normalizeHour(secondHourRaw, secondPeriod);
+    if (
+      !Number.isNaN(firstHour) &&
+      !Number.isNaN(firstMinute) &&
+      !Number.isNaN(secondHour) &&
+      !Number.isNaN(secondMinute)
+    ) {
+      startClock = { hour: firstHour, minute: firstMinute };
+      endClock = { hour: secondHour, minute: secondMinute };
+      input = input.replace(ampmRangeMatch[0], " ").trim();
     }
   } else {
-    const twentyFourHourMatch = input.match(/\b(?:at\s*)?(\d{1,2}):(\d{2})\b/i);
-    if (twentyFourHourMatch) {
-      const hour = Number(twentyFourHourMatch[1]);
-      const minute = Number(twentyFourHourMatch[2]);
-      if (!Number.isNaN(hour) && !Number.isNaN(minute)) {
-        time = { hour, minute };
-        input = input.replace(twentyFourHourMatch[0], " ").trim();
+    const twentyFourRangeMatch = input.match(
+      /\b(?:at\s*)?(\d{1,2}):(\d{2})\s*-\s*(\d{1,2})(?::(\d{2}))?\b/i,
+    );
+    if (twentyFourRangeMatch) {
+      const firstHour = Number(twentyFourRangeMatch[1]);
+      const firstMinute = Number(twentyFourRangeMatch[2]);
+      const secondHour = Number(twentyFourRangeMatch[3]);
+      const secondMinute = Number(twentyFourRangeMatch[4] ?? "0");
+      if (
+        !Number.isNaN(firstHour) &&
+        !Number.isNaN(firstMinute) &&
+        !Number.isNaN(secondHour) &&
+        !Number.isNaN(secondMinute)
+      ) {
+        startClock = { hour: firstHour, minute: firstMinute };
+        endClock = { hour: secondHour, minute: secondMinute };
+        input = input.replace(twentyFourRangeMatch[0], " ").trim();
+      }
+    } else {
+      const ampmTimeMatch = input.match(
+        /\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i,
+      );
+      if (ampmTimeMatch) {
+        let hour = Number(ampmTimeMatch[1]);
+        const minute = Number(ampmTimeMatch[2] ?? "0");
+        const period = ampmTimeMatch[3].toLowerCase();
+        if (period === "pm" && hour < 12) {
+          hour += 12;
+        }
+        if (period === "am" && hour === 12) {
+          hour = 0;
+        }
+        if (!Number.isNaN(hour) && !Number.isNaN(minute)) {
+          startClock = { hour, minute };
+          input = input.replace(ampmTimeMatch[0], " ").trim();
+        }
+      } else {
+        const twentyFourHourMatch = input.match(/\b(?:at\s*)?(\d{1,2}):(\d{2})\b/i);
+        if (twentyFourHourMatch) {
+          const hour = Number(twentyFourHourMatch[1]);
+          const minute = Number(twentyFourHourMatch[2]);
+          if (!Number.isNaN(hour) && !Number.isNaN(minute)) {
+            startClock = { hour, minute };
+            input = input.replace(twentyFourHourMatch[0], " ").trim();
+          }
+        }
       }
     }
   }
 
   const title = input.replace(/\s+/g, " ").trim();
   if (!title) {
-    return { title: "", startTime: null };
+    return { title: "", startTime: null, endTime: null };
   }
 
-  if (!date && time) {
+  if (!date && (startClock || endClock)) {
     const today = new Date();
     date = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   }
 
   if (!date) {
-    return { title, startTime: null };
+    return { title, startTime: null, endTime: null };
   }
 
-  const hour = time?.hour ?? 0;
-  const minute = time?.minute ?? 0;
+  const hour = startClock?.hour ?? 0;
+  const minute = startClock?.minute ?? 0;
   return {
     title,
     startTime: toDateTimeString(date, hour, minute),
+    endTime: endClock ? toDateTimeString(date, endClock.hour, endClock.minute) : null,
   };
 }

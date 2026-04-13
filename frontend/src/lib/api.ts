@@ -5,6 +5,13 @@ export function getApiBaseUrl() {
   return apiBaseUrl;
 }
 
+export class AuthExpiredError extends Error {
+  constructor(message = "Session expired. Please log in again.") {
+    super(message);
+    this.name = "AuthExpiredError";
+  }
+}
+
 export type Task = {
   id: number;
   title: string;
@@ -43,10 +50,52 @@ function getAuthToken() {
   return window.localStorage.getItem("auth_token");
 }
 
+function clearAuthToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem("auth_token");
+}
+
+function decodeJwtPayload(token: string) {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    return null;
+  }
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = window.atob(normalized + padding);
+    return JSON.parse(decoded) as { exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+export function getTokenExpiryMs(token: string) {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) {
+    return null;
+  }
+  return payload.exp * 1000;
+}
+
+function isTokenExpired(token: string) {
+  const expiryMs = getTokenExpiryMs(token);
+  if (!expiryMs) {
+    return false;
+  }
+  return Date.now() >= expiryMs;
+}
+
 function buildHeaders(contentType = "application/json") {
   const token = getAuthToken();
   if (!token) {
-    throw new Error("You are not logged in.");
+    throw new AuthExpiredError("You are not logged in.");
+  }
+  if (isTokenExpired(token)) {
+    clearAuthToken();
+    throw new AuthExpiredError();
   }
   return {
     Authorization: `Bearer ${token}`,
@@ -79,6 +128,10 @@ export async function fetchTasks(limit = 300, skip = 0): Promise<Task[]> {
     },
   );
 
+  if (response.status === 401) {
+    clearAuthToken();
+    throw new AuthExpiredError();
+  }
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as
       | { detail?: unknown }
@@ -99,6 +152,10 @@ export async function updateTask(
     body: JSON.stringify(payload),
   });
 
+  if (response.status === 401) {
+    clearAuthToken();
+    throw new AuthExpiredError();
+  }
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as
       | { detail?: unknown }
@@ -116,6 +173,10 @@ export async function createTask(payload: TaskCreateInput): Promise<Task> {
     body: JSON.stringify(payload),
   });
 
+  if (response.status === 401) {
+    clearAuthToken();
+    throw new AuthExpiredError();
+  }
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as
       | { detail?: unknown }
@@ -132,6 +193,10 @@ export async function deleteTask(taskId: number): Promise<void> {
     headers: buildHeaders("application/json"),
   });
 
+  if (response.status === 401) {
+    clearAuthToken();
+    throw new AuthExpiredError();
+  }
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as
       | { detail?: unknown }

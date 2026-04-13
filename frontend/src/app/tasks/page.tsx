@@ -13,9 +13,11 @@ import { useRouter } from "next/navigation";
 import DateSection from "@/components/DateSection";
 import TaskItem from "@/components/TaskItem";
 import {
+  AuthExpiredError,
   createTask,
   deleteTask,
   fetchTasks,
+  getTokenExpiryMs,
   Task,
   TaskUpdateInput,
   updateTask,
@@ -162,6 +164,48 @@ export default function TasksPage() {
   const [unscheduledCreateError, setUnscheduledCreateError] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const lastTaskDayTriggerRef = useRef<HTMLDivElement | null>(null);
+  const hasRedirectedForAuthRef = useRef(false);
+
+  const redirectToLogin = useCallback(() => {
+    if (hasRedirectedForAuthRef.current) {
+      return;
+    }
+    hasRedirectedForAuthRef.current = true;
+    localStorage.removeItem("auth_token");
+    router.push("/");
+  }, [router]);
+
+  const handleAuthError = useCallback(
+    (error: unknown) => {
+      if (error instanceof AuthExpiredError) {
+        redirectToLogin();
+        return true;
+      }
+      return false;
+    },
+    [redirectToLogin],
+  );
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      redirectToLogin();
+      return;
+    }
+    const expiryMs = getTokenExpiryMs(token);
+    if (!expiryMs) {
+      return;
+    }
+    const remaining = expiryMs - Date.now();
+    if (remaining <= 0) {
+      redirectToLogin();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      redirectToLogin();
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [redirectToLogin]);
 
   useEffect(() => {
     let isMounted = true;
@@ -175,6 +219,9 @@ export default function TasksPage() {
           setTasks(data.filter((task) => !task.completed));
         }
       } catch (loadError) {
+        if (handleAuthError(loadError)) {
+          return;
+        }
         if (isMounted) {
           setError(
             loadError instanceof Error
@@ -193,7 +240,7 @@ export default function TasksPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [handleAuthError]);
 
   useEffect(() => {
     const node = sentinelRef.current;
@@ -469,7 +516,15 @@ export default function TasksPage() {
         };
       }
 
-      const updated = await updateTask(draggedTask.id, patch);
+      let updated: Task;
+      try {
+        updated = await updateTask(draggedTask.id, patch);
+      } catch (dropError) {
+        if (handleAuthError(dropError)) {
+          return;
+        }
+        throw dropError;
+      }
       setTasks((prev) =>
         prev.map((task) => (task.id === draggedTask.id ? { ...task, ...updated } : task)),
       );
@@ -491,7 +546,7 @@ export default function TasksPage() {
       setDragReadyTaskId(null);
       setDropIndicator(null);
     },
-    [dragState, getBucketTasks, tasks],
+    [dragState, getBucketTasks, handleAuthError, tasks],
   );
 
   const handleEditStateChange = useCallback((taskId: number, isEditing: boolean) => {
@@ -532,10 +587,18 @@ export default function TasksPage() {
   const handleTaskSave = useCallback(
     async (taskId: number, payload: TaskUpdateInput) => {
       const currentTask = tasks.find((task) => task.id === taskId);
-      const updated = await updateTask(taskId, {
-        title: currentTask?.title ?? "Task",
-        ...payload,
-      });
+      let updated: Task;
+      try {
+        updated = await updateTask(taskId, {
+          title: currentTask?.title ?? "Task",
+          ...payload,
+        });
+      } catch (saveError) {
+        if (handleAuthError(saveError)) {
+          return;
+        }
+        throw saveError;
+      }
       if (updated.completed) {
         setTasks((prev) => prev.filter((task) => task.id !== taskId));
         return;
@@ -544,7 +607,7 @@ export default function TasksPage() {
         prev.map((task) => (task.id === taskId ? { ...task, ...updated } : task)),
       );
     },
-    [tasks],
+    [handleAuthError, tasks],
   );
 
   const handleTaskComplete = useCallback(async (taskId: number) => {
@@ -560,6 +623,9 @@ export default function TasksPage() {
         completed: true,
       });
     } catch (completeError) {
+      if (handleAuthError(completeError)) {
+        return;
+      }
       if (removedTask) {
         setTasks((prev) => [removedTask as Task, ...prev]);
       }
@@ -570,12 +636,19 @@ export default function TasksPage() {
       );
       throw completeError;
     }
-  }, []);
+  }, [handleAuthError]);
 
   const handleTaskDelete = useCallback(async (taskId: number) => {
-    await deleteTask(taskId);
+    try {
+      await deleteTask(taskId);
+    } catch (deleteError) {
+      if (handleAuthError(deleteError)) {
+        return;
+      }
+      throw deleteError;
+    }
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
-  }, []);
+  }, [handleAuthError]);
 
   async function handleCreateTaskForDate(
     event: FormEvent<HTMLFormElement>,
@@ -598,6 +671,7 @@ export default function TasksPage() {
       const created = await createTask({
         title: parsed.title,
         start_time: parsed.startTime,
+        end_time: parsed.endTime,
         description: description || null,
         location: location || null,
       });
@@ -609,6 +683,9 @@ export default function TasksPage() {
       setIsEditingDescriptionByDate((prev) => ({ ...prev, [dateKey]: false }));
       setIsEditingLocationByDate((prev) => ({ ...prev, [dateKey]: false }));
     } catch (createError) {
+      if (handleAuthError(createError)) {
+        return;
+      }
       setCreateErrorByDate((prev) => ({
         ...prev,
         [dateKey]:
@@ -635,6 +712,7 @@ export default function TasksPage() {
       const created = await createTask({
         title: parsed.title,
         start_time: hasDateToken(rawInput) ? parsed.startTime : null,
+        end_time: hasDateToken(rawInput) ? parsed.endTime : null,
         description: description || null,
         location: location || null,
       });
@@ -646,6 +724,9 @@ export default function TasksPage() {
       setIsEditingUnscheduledDescription(false);
       setIsEditingUnscheduledLocation(false);
     } catch (createError) {
+      if (handleAuthError(createError)) {
+        return;
+      }
       setUnscheduledCreateError(
         createError instanceof Error ? createError.message : "Could not create task.",
       );
@@ -787,8 +868,8 @@ export default function TasksPage() {
           <div className="quickAddDescriptionRow">
             {isEditingDescriptionByDate[dateKey] ||
             (newDescriptionByDate[dateKey] ?? "").trim() !== "" ? (
-              <input
-                className="taskMetaInlineInput"
+              <textarea
+                className="taskMetaInlineInput taskMetaInlineTextarea"
                 value={newDescriptionByDate[dateKey] ?? ""}
                 onChange={(event) =>
                   setNewDescriptionByDate((prev) => ({
@@ -796,6 +877,12 @@ export default function TasksPage() {
                     [dateKey]: event.target.value,
                   }))
                 }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                }}
                 onBlur={() => {
                   if (!(newDescriptionByDate[dateKey] ?? "").trim()) {
                     setIsEditingDescriptionByDate((prev) => ({
@@ -804,6 +891,7 @@ export default function TasksPage() {
                     }));
                   }
                 }}
+                rows={2}
                 placeholder="Add description"
               />
             ) : (
@@ -961,15 +1049,22 @@ export default function TasksPage() {
           {showTopComposerMeta && (
             <div className="quickAddDescriptionRow">
               {isEditingUnscheduledDescription || newUnscheduledDescription.trim() !== "" ? (
-                <input
-                  className="taskMetaInlineInput"
+                <textarea
+                  className="taskMetaInlineInput taskMetaInlineTextarea"
                   value={newUnscheduledDescription}
                   onChange={(event) => setNewUnscheduledDescription(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
+                  }}
                   onBlur={() => {
                     if (!newUnscheduledDescription.trim()) {
                       setIsEditingUnscheduledDescription(false);
                     }
                   }}
+                  rows={2}
                   placeholder="Add description"
                 />
               ) : (
@@ -1085,7 +1180,12 @@ export default function TasksPage() {
 
           {dateEntries.map((entry, index) => {
             if (entry.type === "gap") {
-              const gapLabel = `${formatDateShortLabelFromKey(entry.startKey)} - ${formatDateShortLabelFromKey(entry.endKey)}`;
+              const startLabel = formatDateShortLabelFromKey(entry.startKey);
+              const endLabel = formatDateShortLabelFromKey(entry.endKey);
+              const gapLabel =
+                entry.startKey === entry.endKey
+                  ? startLabel
+                  : `${startLabel} - ${endLabel}`;
               const isExpanded = !!expandedMissingRanges[entry.rangeKey];
               return (
                 <button

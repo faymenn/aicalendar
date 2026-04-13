@@ -64,17 +64,33 @@ export default function TaskItem({
   const [isError, setIsError] = useState(false);
 
   const taskTime = useMemo(() => {
-    const baseValue = task.start_time ?? task.end_time;
-    if (!baseValue) {
+    const formatTime = (value: string | null) => {
+      if (!value) {
+        return null;
+      }
+      const date = new Date(value);
+      const hasTime =
+        date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+      if (!hasTime) {
+        return null;
+      }
+      return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    };
+    const startLabel = formatTime(task.start_time);
+    const endLabel = formatTime(task.end_time);
+    if (startLabel && endLabel) {
+      return `${startLabel} - ${endLabel}`;
+    }
+    if (startLabel) {
+      return startLabel;
+    }
+    if (endLabel) {
+      return endLabel;
+    }
+    if (!task.start_time && !task.end_time) {
       return null;
     }
-    const date = new Date(baseValue);
-    const hasTime =
-      date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
-    if (!hasTime) {
-      return null;
-    }
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return null;
   }, [task.end_time, task.start_time]);
 
   async function saveChanges(payload: TaskUpdateInput, successText: string) {
@@ -111,6 +127,9 @@ export default function TaskItem({
       const payload: TaskUpdateInput = { title: nextTitle };
       if (parsed.startTime !== null) {
         payload.start_time = parsed.startTime;
+      }
+      if (parsed.endTime !== null) {
+        payload.end_time = parsed.endTime;
       }
       await saveChanges(payload, "");
       setTitleDraft(nextTitle);
@@ -185,8 +204,8 @@ export default function TaskItem({
     }
   }
 
-  async function onDescriptionKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
+  async function onDescriptionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       await saveDescriptionIfChanged();
       setIsEditingDescription(false);
@@ -275,13 +294,14 @@ export default function TaskItem({
               )}
 
               {isEditingDescription ? (
-                <input
-                  className="taskMetaInlineInput"
+                <textarea
+                  className="taskMetaInlineInput taskMetaInlineTextarea"
                   value={descriptionDraft}
                   onChange={(event) => setDescriptionDraft(event.target.value)}
                   onBlur={() => void onDescriptionBlur()}
                   onKeyDown={(event) => void onDescriptionKeyDown(event)}
                   autoFocus
+                  rows={2}
                   placeholder="Add description"
                 />
               ) : task.description ? (
