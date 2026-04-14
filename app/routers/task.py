@@ -42,6 +42,8 @@ def update_task(task_id: int, task: schema.TaskCreate, db: Session = Depends(get
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this task")
     update_data = task.model_dump(exclude_unset=True)
     update_data.pop("created_at", None)
+    if "completed" in update_data:
+        update_data["completed_at"] = datetime.now() if update_data["completed"] else None
     update_data["updated_at"] = datetime.now()
     task_query.update(update_data, synchronize_session=False)
     db.commit()

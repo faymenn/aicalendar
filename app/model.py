@@ -15,6 +15,9 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    deadline = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
 
 class User(Base):
     __tablename__ = "users"

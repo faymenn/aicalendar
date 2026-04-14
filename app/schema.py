@@ -10,6 +10,8 @@ class TaskBase(BaseModel):
     end_time: Optional[datetime] = None
     location: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+    deadline: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 class TaskCreate(TaskBase):
     created_at: datetime = datetime.now()
