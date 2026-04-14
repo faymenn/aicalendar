@@ -97,6 +97,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SECRET_KEY }}
           script: |
+            set -e
             cd /home/ec2-user/aicalendar
             docker image prune -af
             docker builder prune -af
@@ -104,3 +105,5 @@ jobs:
             docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/aitodolist-frontend:latest
             docker compose down
             docker compose up -d
+            sleep 8
+            docker compose exec -T app alembic upgrade head || docker compose exec -T app python -m alembic upgrade head
