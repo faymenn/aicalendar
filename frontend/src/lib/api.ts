@@ -20,6 +20,8 @@ export type Task = {
   start_time: string | null;
   end_time: string | null;
   location: string | null;
+  deadline: string | null;
+  completed_at: string | null;
   owner_id: number;
   created_at: string;
   updated_at: string | null;
@@ -32,6 +34,8 @@ export type TaskUpdateInput = {
   completed?: boolean;
   start_time?: string | null;
   end_time?: string | null;
+  deadline?: string | null;
+  completed_at?: string | null;
 };
 
 export type TaskCreateInput = {
@@ -41,6 +45,8 @@ export type TaskCreateInput = {
   start_time?: string | null;
   end_time?: string | null;
   completed?: boolean;
+  deadline?: string | null;
+  completed_at?: string | null;
 };
 
 function getAuthToken() {

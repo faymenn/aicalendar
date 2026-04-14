@@ -187,6 +187,12 @@ a {
   text-decoration: underline;
 }
 
+.tasksHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
 .tasksContainer {
   display: flex;
   flex-direction: column;
@@ -281,6 +287,13 @@ a {
   padding-right: 0.25rem;
 }
 
+.quickAddMetaStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
 .quickAddInput {
   width: 100%;
   border: 0;
@@ -300,6 +313,11 @@ a {
 }
 
 .quickAddMetaLocationInput {
+  margin-left: 0;
+  margin-top: 0;
+}
+
+.quickAddMetaDeadlineInput {
   margin-left: 0;
   margin-top: 0;
 }
@@ -435,6 +453,12 @@ a {
   user-select: none;
 }
 
+.taskDragHandleSpacer {
+  width: 0.85rem;
+  flex-shrink: 0;
+  margin-top: 0.02rem;
+}
+
 .taskDragHandle:active {
   cursor: pointer;
 }
@@ -451,6 +475,21 @@ a {
   color: #6f6f6f;
 }
 
+.taskCompleteButton.completed {
+  background: #000000;
+  border-color: #000000;
+}
+
+.taskCompleteButton.completed .taskCompleteCheck {
+  opacity: 0;
+  color: transparent;
+}
+
+.taskCompleteButton.completed:hover {
+  background: #ffffff;
+  border-color: #8f8f8f;
+}
+
 .taskTitleButton {
   border: 0;
   background: transparent;
@@ -460,6 +499,12 @@ a {
   cursor: pointer;
   text-align: left;
   padding: 0;
+}
+
+.taskTitleReadonly {
+  color: #000000;
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .taskTitleButton:focus-visible {
@@ -503,6 +548,11 @@ a {
   text-overflow: clip;
 }
 
+.taskDescriptionPreview.readonly,
+.taskLocation.readonly {
+  cursor: default;
+}
+
 .taskLocation {
   border: 0;
   background: transparent;
@@ -515,6 +565,23 @@ a {
   margin-left: 0.8rem;
   margin-top: 0.08rem;
   flex-shrink: 0;
+}
+
+.taskMetaColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.taskDeadline {
+  color: #7f7f7f;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.taskDeadline:hover {
+  color: #5f5f5f;
 }
 
 .taskMetaGhostButton {

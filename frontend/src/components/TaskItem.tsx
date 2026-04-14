@@ -3,8 +3,10 @@
 import {
   KeyboardEvent,
   MouseEvent,
+  ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Task, TaskUpdateInput } from "@/lib/api";
@@ -19,10 +21,103 @@ type TaskItemProps = {
   onDragHandleMouseDown?: () => void;
   onEditStateChange?: (taskId: number, isEditing: boolean) => void;
   forceShowMeta?: boolean;
+  hideDragHandle?: boolean;
+  showCompletedState?: boolean;
+  completeAriaLabel?: string;
+  timeLabel?: string | null;
+  readOnly?: boolean;
 };
 
 function toInputValue(value: string | null) {
   return value ?? "";
+}
+
+function parseDateValue(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.trim();
+  const localParts = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/,
+  );
+  if (localParts) {
+    const year = Number(localParts[1]);
+    const month = Number(localParts[2]) - 1;
+    const day = Number(localParts[3]);
+    const hour = Number(localParts[4] ?? "0");
+    const minute = Number(localParts[5] ?? "0");
+    const second = Number(localParts[6] ?? "0");
+    return new Date(year, month, day, hour, minute, second);
+  }
+  const fallback = new Date(normalized);
+  if (Number.isNaN(fallback.getTime())) {
+    return null;
+  }
+  return fallback;
+}
+
+type DeadlineDisplay = {
+  dateText: string;
+  dayCount: number | null;
+  isPast: boolean;
+};
+
+function formatDeadlineInputValue(value: string | null) {
+  const date = parseDateValue(value);
+  if (!date) {
+    return "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
+function formatDeadlineDisplay(value: string | null): DeadlineDisplay | null {
+  const date = parseDateValue(value);
+  if (!date) {
+    return value ? { dateText: `Due at ${value}`, dayCount: null, isPast: false } : null;
+  }
+
+  const day = date.getDate();
+  const suffix =
+    day >= 11 && day <= 13
+      ? "th"
+      : day % 10 === 1
+        ? "st"
+        : day % 10 === 2
+          ? "nd"
+          : day % 10 === 3
+            ? "rd"
+            : "th";
+  const month = date.toLocaleDateString("en-GB", { month: "long" });
+  const hasTime =
+    date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const deadlineStart = new Date(date);
+  deadlineStart.setHours(0, 0, 0, 0);
+  const daysDiff = Math.round(
+    (deadlineStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const absDays = Math.abs(daysDiff);
+
+  if (!hasTime) {
+    return {
+      dateText: `Due at ${day}${suffix} ${month}`,
+      dayCount: absDays,
+      isPast: daysDiff < 0,
+    };
+  }
+
+  const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return {
+    dateText: `Due at ${day}${suffix} ${month}, ${time}`,
+    dayCount: absDays,
+    isPast: daysDiff < 0,
+  };
 }
 
 export default function TaskItem({
@@ -33,20 +128,59 @@ export default function TaskItem({
   onDragHandleMouseDown,
   onEditStateChange,
   forceShowMeta = false,
+  hideDragHandle = false,
+  showCompletedState = false,
+  completeAriaLabel = "Mark task complete",
+  timeLabel,
+  readOnly = false,
 }: TaskItemProps) {
   const [isHovering, setIsHovering] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [isEditingDeadline, setIsEditingDeadline] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
   const [locationDraft, setLocationDraft] = useState(toInputValue(task.location));
+  const [deadlineDraft, setDeadlineDraft] = useState(
+    formatDeadlineInputValue(task.deadline),
+  );
+  const skipDeadlineBlurSaveRef = useRef(false);
   const [descriptionDraft, setDescriptionDraft] = useState(
     toInputValue(task.description),
   );
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
 
+  function renderDeadlineLabel(value: string | null): ReactNode {
+    const formatted = formatDeadlineDisplay(value);
+    if (!formatted) {
+      return null;
+    }
+    if (formatted.dayCount === null) {
+      return formatted.dateText;
+    }
+    const unit = `day${formatted.dayCount === 1 ? "" : "s"}`;
+    return (
+      <>
+        {formatted.dateText} (
+        {formatted.isPast ? (
+          <>
+            <strong>{formatted.dayCount}</strong> {unit} ago
+          </>
+        ) : (
+          <>
+            in <strong>{formatted.dayCount}</strong> {unit}
+          </>
+        )}
+        )
+      </>
+    );
+  }
+
   const taskTime = useMemo(() => {
+    if (timeLabel !== undefined) {
+      return timeLabel;
+    }
     const formatTime = (value: string | null) => {
       if (!value) {
         return null;
@@ -74,7 +208,7 @@ export default function TaskItem({
       return null;
     }
     return null;
-  }, [task.end_time, task.start_time]);
+  }, [task.end_time, task.start_time, timeLabel]);
 
   async function saveChanges(payload: TaskUpdateInput, successText: string) {
     setIsError(false);
@@ -82,9 +216,11 @@ export default function TaskItem({
     try {
       await onSave(task.id, payload);
       setMessage(successText || "");
+      return true;
     } catch (error) {
       setIsError(true);
       setMessage(error instanceof Error ? error.message : "Could not save.");
+      return false;
     }
   }
 
@@ -137,7 +273,7 @@ export default function TaskItem({
       await onComplete(task.id);
     } catch (error) {
       setIsError(true);
-      setMessage(error instanceof Error ? error.message : "Could not complete task.");
+      setMessage(error instanceof Error ? error.message : "Could not update task.");
     }
   }
 
@@ -165,6 +301,33 @@ export default function TaskItem({
     );
   }
 
+  async function saveDeadlineIfChanged() {
+    const nextDeadlineRaw = deadlineDraft.trim();
+    if (!nextDeadlineRaw) {
+      if (!task.deadline) {
+        return true;
+      }
+      return saveChanges({ deadline: null, title: task.title }, "");
+    }
+
+    const parsed = parseTaskInput(`deadline ${nextDeadlineRaw}`, {
+      defaultDateKey: getDateKeyFromTask(task),
+    });
+    if (!parsed.startTime) {
+      setIsError(true);
+      setMessage("Could not parse deadline. Try text like 'tomorrow 5pm'.");
+      return false;
+    }
+    if (parsed.startTime === task.deadline) {
+      return true;
+    }
+    const didSave = await saveChanges({ deadline: parsed.startTime, title: task.title }, "");
+    if (didSave) {
+      setDeadlineDraft(formatDeadlineInputValue(parsed.startTime));
+    }
+    return didSave;
+  }
+
   async function onLocationBlur() {
     await saveLocationIfChanged();
     setIsEditingLocation(false);
@@ -173,6 +336,17 @@ export default function TaskItem({
   async function onDescriptionBlur() {
     await saveDescriptionIfChanged();
     setIsEditingDescription(false);
+  }
+
+  async function onDeadlineBlur() {
+    if (skipDeadlineBlurSaveRef.current) {
+      skipDeadlineBlurSaveRef.current = false;
+      return;
+    }
+    const didSave = await saveDeadlineIfChanged();
+    if (didSave) {
+      setIsEditingDeadline(false);
+    }
   }
 
   async function onLocationKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -199,6 +373,23 @@ export default function TaskItem({
     }
   }
 
+  async function onDeadlineKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      skipDeadlineBlurSaveRef.current = true;
+      const didSave = await saveDeadlineIfChanged();
+      if (didSave) {
+        setIsEditingDeadline(false);
+      } else {
+        skipDeadlineBlurSaveRef.current = false;
+      }
+    }
+    if (event.key === "Escape") {
+      setDeadlineDraft(formatDeadlineInputValue(task.deadline));
+      setIsEditingDeadline(false);
+    }
+  }
+
   async function onTitleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -211,15 +402,16 @@ export default function TaskItem({
     }
   }
 
-  const showMetaPrompts = isHovering || isEditingTitle || forceShowMeta;
+  const showMetaPrompts = !readOnly && (isHovering || isEditingTitle || forceShowMeta);
 
   useEffect(() => {
     onEditStateChange?.(
       task.id,
-      isEditingTitle || isEditingDescription || isEditingLocation,
+      isEditingTitle || isEditingDescription || isEditingLocation || isEditingDeadline,
     );
   }, [
     isEditingDescription,
+    isEditingDeadline,
     isEditingLocation,
     isEditingTitle,
     onEditStateChange,
@@ -233,21 +425,25 @@ export default function TaskItem({
       onMouseLeave={() => setIsHovering(false)}
     >
       <div className="taskRow">
+        {hideDragHandle ? (
+          <span className="taskDragHandleSpacer" aria-hidden="true" />
+        ) : (
+          <button
+            type="button"
+            className="taskDragHandle"
+            aria-label="Drag task"
+            onMouseDown={() => onDragHandleMouseDown?.()}
+          >
+            ⋮⋮
+          </button>
+        )}
         <button
           type="button"
-          className="taskDragHandle"
-          aria-label="Drag task"
-          onMouseDown={() => onDragHandleMouseDown?.()}
-        >
-          ⋮⋮
-        </button>
-        <button
-          type="button"
-          className="taskCompleteButton"
+          className={showCompletedState ? "taskCompleteButton completed" : "taskCompleteButton"}
           onClick={onCompleteClick}
-          aria-label="Mark task complete"
+          aria-label={completeAriaLabel}
         >
-          <span className="taskCompleteCheck">✓</span>
+          <span className="taskCompleteCheck">✔</span>
         </button>
 
         <div className="taskMain">
@@ -255,7 +451,9 @@ export default function TaskItem({
             {taskTime && <p className="taskTime">{taskTime}</p>}
 
             <div className="taskTextGroup">
-              {isEditingTitle ? (
+              {readOnly ? (
+                <p className="taskTitleReadonly">{task.title}</p>
+              ) : isEditingTitle ? (
                 <>
                   <input
                     className="taskMetaInlineInput taskTitleInlineInput"
@@ -276,7 +474,11 @@ export default function TaskItem({
                 </button>
               )}
 
-              {isEditingDescription ? (
+              {readOnly ? (
+                task.description ? (
+                  <p className="taskDescriptionPreview readonly">{task.description}</p>
+                ) : null
+              ) : isEditingDescription ? (
                 <textarea
                   className="taskMetaInlineInput taskMetaInlineTextarea"
                   value={descriptionDraft}
@@ -309,35 +511,82 @@ export default function TaskItem({
             </div>
           </div>
 
-          {isEditingLocation ? (
-            <input
-              className="taskMetaInlineInput taskLocationInput"
-              value={locationDraft}
-              onChange={(event) => setLocationDraft(event.target.value)}
-              onBlur={() => void onLocationBlur()}
-              onKeyDown={(event) => void onLocationKeyDown(event)}
-              autoFocus
-              placeholder="Add location"
-            />
-          ) : task.location ? (
-            <button
-              type="button"
-              className="taskLocation"
-              onClick={() => setIsEditingLocation(true)}
-            >
-              {task.location}
-            </button>
-          ) : (
-            showMetaPrompts && (
+          <div className="taskMetaColumn">
+            {readOnly ? (
+              task.location ? (
+                <span className="taskLocation readonly">{task.location}</span>
+              ) : null
+            ) : isEditingLocation ? (
+              <input
+                className="taskMetaInlineInput taskLocationInput"
+                value={locationDraft}
+                onChange={(event) => setLocationDraft(event.target.value)}
+                onBlur={() => void onLocationBlur()}
+                onKeyDown={(event) => void onLocationKeyDown(event)}
+                autoFocus
+                placeholder="Add location"
+              />
+            ) : task.location ? (
               <button
                 type="button"
-                className="taskMetaGhostButton taskLocationGhost"
+                className="taskLocation"
                 onClick={() => setIsEditingLocation(true)}
               >
-                Add location
+                {task.location}
               </button>
-            )
-          )}
+            ) : (
+              showMetaPrompts && (
+                <button
+                  type="button"
+                  className="taskMetaGhostButton taskLocationGhost"
+                  onClick={() => setIsEditingLocation(true)}
+                >
+                  Add location
+                </button>
+              )
+            )}
+
+            {readOnly ? (
+              task.deadline ? (
+                <span className="taskLocation taskDeadline readonly">
+                  {renderDeadlineLabel(task.deadline)}
+                </span>
+              ) : null
+            ) : isEditingDeadline ? (
+              <input
+                className="taskMetaInlineInput taskLocationInput taskDeadline"
+                value={deadlineDraft}
+                onChange={(event) => setDeadlineDraft(event.target.value)}
+                onBlur={() => void onDeadlineBlur()}
+                onKeyDown={(event) => void onDeadlineKeyDown(event)}
+                placeholder="Set deadline"
+              />
+            ) : task.deadline ? (
+              <button
+                type="button"
+                className="taskLocation taskDeadline"
+                onClick={() => {
+                  setDeadlineDraft(formatDeadlineInputValue(task.deadline));
+                  setIsEditingDeadline(true);
+                }}
+              >
+                {renderDeadlineLabel(task.deadline)}
+              </button>
+            ) : (
+              showMetaPrompts && (
+                <button
+                  type="button"
+                  className="taskMetaGhostButton taskLocationGhost"
+                  onClick={() => {
+                    setDeadlineDraft(formatDeadlineInputValue(task.deadline));
+                    setIsEditingDeadline(true);
+                  }}
+                >
+                  Add deadline
+                </button>
+              )
+            )}
+          </div>
         </div>
       </div>
       {message && (

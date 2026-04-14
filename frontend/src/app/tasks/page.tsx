@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DateSection from "@/components/DateSection";
 import TaskItem from "@/components/TaskItem";
@@ -107,18 +108,27 @@ export default function TasksPage() {
   const [newLocationByDate, setNewLocationByDate] = useState<Record<string, string>>(
     {},
   );
+  const [newDeadlineByDate, setNewDeadlineByDate] = useState<Record<string, string>>(
+    {},
+  );
   const [isEditingDescriptionByDate, setIsEditingDescriptionByDate] = useState<
     Record<string, boolean>
   >({});
   const [isEditingLocationByDate, setIsEditingLocationByDate] = useState<
     Record<string, boolean>
   >({});
+  const [isEditingDeadlineByDate, setIsEditingDeadlineByDate] = useState<
+    Record<string, boolean>
+  >({});
   const [newUnscheduledTask, setNewUnscheduledTask] = useState("");
   const [newUnscheduledDescription, setNewUnscheduledDescription] = useState("");
   const [newUnscheduledLocation, setNewUnscheduledLocation] = useState("");
+  const [newUnscheduledDeadline, setNewUnscheduledDeadline] = useState("");
   const [isEditingUnscheduledDescription, setIsEditingUnscheduledDescription] =
     useState(false);
   const [isEditingUnscheduledLocation, setIsEditingUnscheduledLocation] =
+    useState(false);
+  const [isEditingUnscheduledDeadline, setIsEditingUnscheduledDeadline] =
     useState(false);
   const [newlyAddedTaskId, setNewlyAddedTaskId] = useState<number | null>(null);
   const [creatingDateKey, setCreatingDateKey] = useState<string | null>(null);
@@ -618,8 +628,13 @@ export default function TasksPage() {
         setTasks((prev) => prev.filter((task) => task.id !== taskId));
         return;
       }
+      const mergedTask = {
+        ...(currentTask ?? ({ id: taskId } as Task)),
+        ...payload,
+        ...updated,
+      };
       setTasks((prev) =>
-        prev.map((task) => (task.id === taskId ? { ...task, ...updated } : task)),
+        prev.map((task) => (task.id === taskId ? { ...task, ...mergedTask } : task)),
       );
     },
     [handleAuthError, tasks],
@@ -665,6 +680,18 @@ export default function TasksPage() {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
   }, [handleAuthError]);
 
+  function parseDeadlineInput(rawInput: string, defaultDateKey?: string) {
+    const trimmed = rawInput.trim();
+    if (!trimmed) {
+      return { value: null as string | null, error: null as string | null };
+    }
+    const parsed = parseTaskInput(`deadline ${trimmed}`, { defaultDateKey });
+    if (!parsed.startTime) {
+      return { value: null, error: "Could not parse deadline. Try text like 'tomorrow 5pm'." };
+    }
+    return { value: parsed.startTime, error: null };
+  }
+
   async function handleCreateTaskForDate(
     event: FormEvent<HTMLFormElement>,
     dateKey: string,
@@ -683,20 +710,34 @@ export default function TasksPage() {
     try {
       const description = (newDescriptionByDate[dateKey] ?? "").trim();
       const location = (newLocationByDate[dateKey] ?? "").trim();
+      const parsedDeadline = parseDeadlineInput(
+        newDeadlineByDate[dateKey] ?? "",
+        dateKey,
+      );
+      if (parsedDeadline.error) {
+        setCreateErrorByDate((prev) => ({
+          ...prev,
+          [dateKey]: parsedDeadline.error as string,
+        }));
+        return;
+      }
       const created = await createTask({
         title: parsed.title,
         start_time: parsed.startTime,
         end_time: parsed.endTime,
         description: description || null,
         location: location || null,
+        deadline: parsedDeadline.value,
       });
       setTasks((prev) => [created, ...prev]);
       setNewlyAddedTaskId(created.id);
       setNewTaskByDate((prev) => ({ ...prev, [dateKey]: "" }));
       setNewDescriptionByDate((prev) => ({ ...prev, [dateKey]: "" }));
       setNewLocationByDate((prev) => ({ ...prev, [dateKey]: "" }));
+      setNewDeadlineByDate((prev) => ({ ...prev, [dateKey]: "" }));
       setIsEditingDescriptionByDate((prev) => ({ ...prev, [dateKey]: false }));
       setIsEditingLocationByDate((prev) => ({ ...prev, [dateKey]: false }));
+      setIsEditingDeadlineByDate((prev) => ({ ...prev, [dateKey]: false }));
     } catch (createError) {
       if (handleAuthError(createError)) {
         return;
@@ -724,20 +765,28 @@ export default function TasksPage() {
     try {
       const description = newUnscheduledDescription.trim();
       const location = newUnscheduledLocation.trim();
+      const parsedDeadline = parseDeadlineInput(newUnscheduledDeadline, todayKey);
+      if (parsedDeadline.error) {
+        setUnscheduledCreateError(parsedDeadline.error);
+        return;
+      }
       const created = await createTask({
         title: parsed.title,
         start_time: hasDateToken(rawInput) ? parsed.startTime : null,
         end_time: hasDateToken(rawInput) ? parsed.endTime : null,
         description: description || null,
         location: location || null,
+        deadline: parsedDeadline.value,
       });
       setTasks((prev) => [created, ...prev]);
       setNewlyAddedTaskId(created.id);
       setNewUnscheduledTask("");
       setNewUnscheduledDescription("");
       setNewUnscheduledLocation("");
+      setNewUnscheduledDeadline("");
       setIsEditingUnscheduledDescription(false);
       setIsEditingUnscheduledLocation(false);
+      setIsEditingUnscheduledDeadline(false);
     } catch (createError) {
       if (handleAuthError(createError)) {
         return;
@@ -755,8 +804,10 @@ export default function TasksPage() {
     newUnscheduledTask.trim() !== "" ||
     newUnscheduledDescription.trim() !== "" ||
     newUnscheduledLocation.trim() !== "" ||
+    newUnscheduledDeadline.trim() !== "" ||
     isEditingUnscheduledDescription ||
-    isEditingUnscheduledLocation;
+    isEditingUnscheduledLocation ||
+    isEditingUnscheduledDeadline;
   const unscheduledTasks = getBucketTasks("unscheduled");
 
   function handleLogout() {
@@ -782,8 +833,10 @@ export default function TasksPage() {
       (newTaskByDate[dateKey] ?? "").trim() !== "" ||
       (newDescriptionByDate[dateKey] ?? "").trim() !== "" ||
       (newLocationByDate[dateKey] ?? "").trim() !== "" ||
+      (newDeadlineByDate[dateKey] ?? "").trim() !== "" ||
       isEditingDescriptionByDate[dateKey] ||
-      isEditingLocationByDate[dateKey];
+      isEditingLocationByDate[dateKey] ||
+      isEditingDeadlineByDate[dateKey];
 
     return (
       <DateSection
@@ -828,8 +881,10 @@ export default function TasksPage() {
                       (newTaskByDate[dateKey] ?? "").trim() !== "" ||
                       (newDescriptionByDate[dateKey] ?? "").trim() !== "" ||
                       (newLocationByDate[dateKey] ?? "").trim() !== "" ||
+                      (newDeadlineByDate[dateKey] ?? "").trim() !== "" ||
                       !!isEditingDescriptionByDate[dateKey] ||
-                      !!isEditingLocationByDate[dateKey];
+                      !!isEditingLocationByDate[dateKey] ||
+                      !!isEditingDeadlineByDate[dateKey];
                     if (!shouldKeepOpen) {
                       setActiveComposer((prev) => (prev === composerKey ? null : prev));
                     }
@@ -840,41 +895,78 @@ export default function TasksPage() {
             </form>
             {showComposerMeta && (
               <div className="quickAddLocationSlot">
-                {isEditingLocationByDate[dateKey] ||
-                (newLocationByDate[dateKey] ?? "").trim() !== "" ? (
-                  <input
-                    className="taskMetaInlineInput quickAddMetaLocationInput"
-                    value={newLocationByDate[dateKey] ?? ""}
-                    onChange={(event) =>
-                      setNewLocationByDate((prev) => ({
-                        ...prev,
-                        [dateKey]: event.target.value,
-                      }))
-                    }
-                    onBlur={() => {
-                      if (!(newLocationByDate[dateKey] ?? "").trim()) {
+                <div className="quickAddMetaStack">
+                  {isEditingLocationByDate[dateKey] ||
+                  (newLocationByDate[dateKey] ?? "").trim() !== "" ? (
+                    <input
+                      className="taskMetaInlineInput quickAddMetaLocationInput"
+                      value={newLocationByDate[dateKey] ?? ""}
+                      onChange={(event) =>
+                        setNewLocationByDate((prev) => ({
+                          ...prev,
+                          [dateKey]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => {
+                        if (!(newLocationByDate[dateKey] ?? "").trim()) {
+                          setIsEditingLocationByDate((prev) => ({
+                            ...prev,
+                            [dateKey]: false,
+                          }));
+                        }
+                      }}
+                      placeholder="Add location"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="taskMetaGhostButton taskLocationGhost"
+                      onClick={() =>
                         setIsEditingLocationByDate((prev) => ({
                           ...prev,
-                          [dateKey]: false,
-                        }));
+                          [dateKey]: true,
+                        }))
                       }
-                    }}
-                    placeholder="Add location"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="taskMetaGhostButton taskLocationGhost"
-                    onClick={() =>
-                      setIsEditingLocationByDate((prev) => ({
-                        ...prev,
-                        [dateKey]: true,
-                      }))
-                    }
-                  >
-                    Add location
-                  </button>
-                )}
+                    >
+                      Add location
+                    </button>
+                  )}
+                  {isEditingDeadlineByDate[dateKey] ||
+                  (newDeadlineByDate[dateKey] ?? "").trim() !== "" ? (
+                    <input
+                      className="taskMetaInlineInput quickAddMetaDeadlineInput"
+                      value={newDeadlineByDate[dateKey] ?? ""}
+                      onChange={(event) =>
+                        setNewDeadlineByDate((prev) => ({
+                          ...prev,
+                          [dateKey]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => {
+                        if (!(newDeadlineByDate[dateKey] ?? "").trim()) {
+                          setIsEditingDeadlineByDate((prev) => ({
+                            ...prev,
+                            [dateKey]: false,
+                          }));
+                        }
+                      }}
+                      placeholder="Set deadline"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="taskMetaGhostButton taskLocationGhost"
+                      onClick={() =>
+                        setIsEditingDeadlineByDate((prev) => ({
+                          ...prev,
+                          [dateKey]: true,
+                        }))
+                      }
+                    >
+                      Add deadline
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -997,9 +1089,14 @@ export default function TasksPage() {
     <main className="tasksPage">
       <header className="tasksPageHeader">
         <h1 className="tasksPageTitle">whatdowhen</h1>
-        <button type="button" className="logoutButton" onClick={handleLogout}>
-          Logout
-        </button>
+        <div className="tasksHeaderActions">
+          <Link href="/completed" className="logoutButton">
+            Completed
+          </Link>
+          <button type="button" className="logoutButton" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
       </header>
       {isLoading && <p className="statusMessage">Loading tasks...</p>}
       {error && <p className="statusMessage error">{error}</p>}
@@ -1024,8 +1121,10 @@ export default function TasksPage() {
                         newUnscheduledTask.trim() !== "" ||
                         newUnscheduledDescription.trim() !== "" ||
                         newUnscheduledLocation.trim() !== "" ||
+                        newUnscheduledDeadline.trim() !== "" ||
                         isEditingUnscheduledDescription ||
-                        isEditingUnscheduledLocation;
+                        isEditingUnscheduledLocation ||
+                        isEditingUnscheduledDeadline;
                       if (!shouldKeepOpen) {
                         setActiveComposer((prev) => (prev === "top" ? null : prev));
                       }
@@ -1036,27 +1135,50 @@ export default function TasksPage() {
               </form>
               {showTopComposerMeta && (
                 <div className="quickAddLocationSlot">
-                  {isEditingUnscheduledLocation || newUnscheduledLocation.trim() !== "" ? (
-                    <input
-                      className="taskMetaInlineInput quickAddMetaLocationInput"
-                      value={newUnscheduledLocation}
-                      onChange={(event) => setNewUnscheduledLocation(event.target.value)}
-                      onBlur={() => {
-                        if (!newUnscheduledLocation.trim()) {
-                          setIsEditingUnscheduledLocation(false);
-                        }
-                      }}
-                      placeholder="Add location"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="taskMetaGhostButton taskLocationGhost"
-                      onClick={() => setIsEditingUnscheduledLocation(true)}
-                    >
-                      Add location
-                    </button>
-                  )}
+                  <div className="quickAddMetaStack">
+                    {isEditingUnscheduledLocation || newUnscheduledLocation.trim() !== "" ? (
+                      <input
+                        className="taskMetaInlineInput quickAddMetaLocationInput"
+                        value={newUnscheduledLocation}
+                        onChange={(event) => setNewUnscheduledLocation(event.target.value)}
+                        onBlur={() => {
+                          if (!newUnscheduledLocation.trim()) {
+                            setIsEditingUnscheduledLocation(false);
+                          }
+                        }}
+                        placeholder="Add location"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="taskMetaGhostButton taskLocationGhost"
+                        onClick={() => setIsEditingUnscheduledLocation(true)}
+                      >
+                        Add location
+                      </button>
+                    )}
+                    {isEditingUnscheduledDeadline || newUnscheduledDeadline.trim() !== "" ? (
+                      <input
+                        className="taskMetaInlineInput quickAddMetaDeadlineInput"
+                        value={newUnscheduledDeadline}
+                        onChange={(event) => setNewUnscheduledDeadline(event.target.value)}
+                        onBlur={() => {
+                          if (!newUnscheduledDeadline.trim()) {
+                            setIsEditingUnscheduledDeadline(false);
+                          }
+                        }}
+                        placeholder="Set deadline"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="taskMetaGhostButton taskLocationGhost"
+                        onClick={() => setIsEditingUnscheduledDeadline(true)}
+                      >
+                        Add deadline
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
