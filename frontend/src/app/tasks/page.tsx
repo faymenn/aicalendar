@@ -35,6 +35,8 @@ import {
 } from "@/lib/tasks";
 import { hasDateToken, parseTaskInput } from "@/lib/taskInputParser";
 
+const TASK_ORDER_STORAGE_KEY = "task_order_by_bucket_v1";
+
 function fromDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -178,6 +180,25 @@ export default function TasksPage() {
     },
     [redirectToLogin],
   );
+
+  useEffect(() => {
+    const stored = localStorage.getItem(TASK_ORDER_STORAGE_KEY);
+    if (!stored) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored) as Record<string, number[]>;
+      if (parsed && typeof parsed === "object") {
+        setOrderByBucket(parsed);
+      }
+    } catch {
+      localStorage.removeItem(TASK_ORDER_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(TASK_ORDER_STORAGE_KEY, JSON.stringify(orderByBucket));
+  }, [orderByBucket]);
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
