@@ -76,7 +76,7 @@ function dateDiffInDays(fromKey: string, toKey: string) {
 
 function createDateRangeKeys(startKey: string, endKey: string) {
   const total = dateDiffInDays(startKey, endKey);
-  if (total <= 0) {
+  if (total < 0) {
     return [];
   }
   const start = fromDateKey(startKey);
