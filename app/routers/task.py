@@ -15,8 +15,27 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.get("/", response_model=List[schema.TaskResponse])
-def get_all_tasks(db: Session = Depends(get_db), current_user: model.User = Depends(get_current_user), limit: int = 10, skip: int = 0, search: Optional[str] = ""): #get_tasks is a function that gets all the tasks from the database
-    tasks = db.query(model.Task).filter(model.Task.owner_id == current_user.id).filter(model.Task.title.contains(search)).limit(limit).offset(skip).all()
+def get_all_tasks(
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: model.User = Depends(get_current_user),
+    limit: int = 2000,
+    skip: int = 0,
+    search: Optional[str] = "",
+):
+    # Avoid intermediaries/browsers serving a stale empty task list after creates.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    query = db.query(model.Task).filter(model.Task.owner_id == current_user.id)
+    if search:
+        query = query.filter(model.Task.title.contains(search))
+    # Newest first so recently created tasks are never excluded by LIMIT.
+    tasks = (
+        query.order_by(model.Task.id.desc())
+        .limit(limit)
+        .offset(skip)
+        .all()
+    )
     return tasks
 
 #@app.get("/tasks/{task_id}")

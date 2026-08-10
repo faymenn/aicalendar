@@ -55,6 +55,16 @@ function getDateFromTask(task: Task) {
 }
 
 export function getDateKeyFromTask(task: Task) {
+  const dateValue = task.start_time ?? task.end_time;
+  if (!dateValue) {
+    return undefined;
+  }
+  // Use the calendar date from the API string so UTC offsets don't shift
+  // midnight tasks into the previous (collapsed "past") day on refresh.
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(dateValue);
+  if (match) {
+    return match[1];
+  }
   const taskDate = getDateFromTask(task);
   if (!taskDate) {
     return undefined;
@@ -89,12 +99,11 @@ export function groupTasks(tasks: Task[]) {
       unscheduled.push(task);
       return;
     }
-    const taskDate = getDateFromTask(task);
-    if (!taskDate) {
+    const key = getDateKeyFromTask(task);
+    if (!key) {
       unscheduled.push(task);
       return;
     }
-    const key = formatDateKey(taskDate);
     byDate[key] = byDate[key] ?? [];
     byDate[key].push(task);
   });

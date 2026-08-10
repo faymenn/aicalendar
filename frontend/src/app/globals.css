@@ -310,6 +310,34 @@ a {
 .quickAddPlus {
   font-size: 1.2rem;
   line-height: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.quickAddPlus:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.quickAddSubmit {
+  border: 0;
+  background: #111111;
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.quickAddSubmit:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .quickAddMetaLocationInput {

@@ -26,6 +26,21 @@ def test_create_task(authorized_client, test_user, title):
     assert created_task.title == title
     assert created_task.owner_id == test_user["id"]
 
+
+def test_create_task_persists_after_list(authorized_client, test_user):
+    create_res = authorized_client.post(
+        "/tasks/",
+        json={"title": "Persist me", "start_time": "2026-08-10T00:00:00"},
+    )
+    assert create_res.status_code == 201
+    created_id = create_res.json()["id"]
+
+    list_res = authorized_client.get("/tasks/?limit=300")
+    assert list_res.status_code == 200
+    ids = [task["id"] for task in list_res.json()]
+    assert created_id in ids
+    assert list_res.headers.get("cache-control", "").startswith("no-store")
+
 def test_unauthorized_user_create_task(client, test_user):
     res = client.post("/tasks/", json={"title": "Test Task 1"})
     assert res.status_code == 401

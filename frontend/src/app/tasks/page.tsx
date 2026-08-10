@@ -885,7 +885,17 @@ export default function TasksPage() {
               className="quickAddForm quickAddMainForm"
               onSubmit={(event) => void handleCreateTaskForDate(event, dateKey)}
             >
-              <span className="quickAddPlus">+</span>
+              <button
+                type="submit"
+                className="quickAddPlus"
+                aria-label="Add task"
+                disabled={
+                  creatingDateKey === dateKey ||
+                  !(newTaskByDate[dateKey] ?? "").trim()
+                }
+              >
+                +
+              </button>
               <input
                 className="quickAddInput"
                 value={newTaskByDate[dateKey] ?? ""}
@@ -911,8 +921,18 @@ export default function TasksPage() {
                     }
                   }, 120);
                 }}
+                enterKeyHint="done"
                 placeholder="Add task"
               />
+              {(newTaskByDate[dateKey] ?? "").trim() !== "" && (
+                <button
+                  type="submit"
+                  className="quickAddSubmit"
+                  disabled={creatingDateKey === dateKey}
+                >
+                  Add
+                </button>
+              )}
             </form>
             {showComposerMeta && (
               <div className="quickAddLocationSlot">
@@ -1130,7 +1150,14 @@ export default function TasksPage() {
                 className="quickAddForm quickAddMainForm"
                 onSubmit={(event) => void handleCreateUnscheduledTask(event)}
               >
-                <span className="quickAddPlus">+</span>
+                <button
+                  type="submit"
+                  className="quickAddPlus"
+                  aria-label="Add task"
+                  disabled={isCreatingUnscheduled || !newUnscheduledTask.trim()}
+                >
+                  +
+                </button>
                 <input
                   className="quickAddInput"
                   value={newUnscheduledTask}
@@ -1151,8 +1178,18 @@ export default function TasksPage() {
                       }
                     }, 120);
                   }}
+                  enterKeyHint="done"
                   placeholder="Add task"
                 />
+                {newUnscheduledTask.trim() !== "" && (
+                  <button
+                    type="submit"
+                    className="quickAddSubmit"
+                    disabled={isCreatingUnscheduled}
+                  >
+                    Add
+                  </button>
+                )}
               </form>
               {showTopComposerMeta && (
                 <div className="quickAddLocationSlot">

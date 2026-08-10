@@ -125,12 +125,13 @@ function parseErrorDetail(detail: unknown) {
   return "Request failed.";
 }
 
-export async function fetchTasks(limit = 300, skip = 0): Promise<Task[]> {
+export async function fetchTasks(limit = 2000, skip = 0): Promise<Task[]> {
   const response = await fetch(
     `${getApiBaseUrl()}/tasks/?limit=${limit}&skip=${skip}`,
     {
       method: "GET",
       headers: buildHeaders("application/json"),
+      cache: "no-store",
     },
   );
 
@@ -156,6 +157,7 @@ export async function updateTask(
     method: "PUT",
     headers: buildHeaders("application/json"),
     body: JSON.stringify(payload),
+    cache: "no-store",
   });
 
   if (response.status === 401) {
@@ -177,6 +179,7 @@ export async function createTask(payload: TaskCreateInput): Promise<Task> {
     method: "POST",
     headers: buildHeaders("application/json"),
     body: JSON.stringify(payload),
+    cache: "no-store",
   });
 
   if (response.status === 401) {
@@ -197,6 +200,7 @@ export async function deleteTask(taskId: number): Promise<void> {
   const response = await fetch(`${getApiBaseUrl()}/tasks/${taskId}`, {
     method: "DELETE",
     headers: buildHeaders("application/json"),
+    cache: "no-store",
   });
 
   if (response.status === 401) {
