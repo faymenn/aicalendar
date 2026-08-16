@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from .database import engine
 from . import model
-from .routers import task, user, auth
+from .routers import task, user, auth, ai
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()  # creating a fastapi instance
@@ -29,6 +29,7 @@ model.Base.metadata.create_all(bind=engine) #creates all the tables in the model
 app.include_router(task.router)
 app.include_router(user.router)
 app.include_router(auth.router)
+app.include_router(ai.router)
 
 
 @app.get("/")

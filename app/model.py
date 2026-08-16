@@ -1,5 +1,5 @@
 #every model represents a table in the database
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, ForeignKey, UniqueConstraint
 from datetime import datetime
 from .database import Base
 
@@ -25,3 +25,29 @@ class User(Base):
     email = Column(String, nullable=False, unique=True)
     password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
+class AiUsageDaily(Base):
+    __tablename__ = "ai_usage_daily"
+    __table_args__ = (
+        UniqueConstraint("user_id", "usage_date", name="uq_ai_usage_user_date"),
+    )
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    usage_date = Column(Date, nullable=False)
+    request_count = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class AiChatUsage(Base):
+    __tablename__ = "ai_chat_usage"
+    __table_args__ = (
+        UniqueConstraint("user_id", "thread_id", name="uq_ai_chat_user_thread"),
+    )
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(String, nullable=False)
+    request_count = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)

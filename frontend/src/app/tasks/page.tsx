@@ -17,9 +17,12 @@ import {
   AuthExpiredError,
   createTask,
   deleteTask,
+  fetchAiUsage,
   fetchTasks,
   getTokenExpiryMs,
+  planTasksWithAi,
   Task,
+  TaskCreateInput,
   TaskUpdateInput,
   updateTask,
 } from "@/lib/api";
@@ -36,6 +39,104 @@ import {
 import { hasDateToken, parseTaskInput } from "@/lib/taskInputParser";
 
 const TASK_ORDER_STORAGE_KEY = "task_order_by_bucket_v1";
+
+type ComposerMode = "classic" | "ai";
+
+const AI_DEFAULT_PLACEHOLDER =
+  "Ask whatdowhen to create complex repeating tasks...";
+
+function formatAiUsageLabel(usage: {
+  unlimited: boolean;
+  remaining: number | null;
+  limit: number;
+  chat_remaining?: number | null;
+  chat_limit?: number;
+  threadActive?: boolean;
+}) {
+  if (usage.unlimited) {
+    return "Unlimited AI requests";
+  }
+  const remaining = usage.remaining ?? 0;
+  const daily = `${remaining} of ${usage.limit} new chats left today`;
+  if (
+    usage.threadActive &&
+    typeof usage.chat_remaining === "number" &&
+    typeof usage.chat_limit === "number"
+  ) {
+    return `${daily} · ${usage.chat_remaining} of ${usage.chat_limit} replies left in this chat`;
+  }
+  return daily;
+}
+
+function formatProposedTaskWhen(task: TaskCreateInput) {
+  const start = parseNaiveLocalDate(task.start_time);
+  const end = parseNaiveLocalDate(task.end_time);
+  const deadline = parseNaiveLocalDate(task.deadline);
+
+  if (!start && !end && !deadline) {
+    return "Unscheduled";
+  }
+
+  const parts: string[] = [];
+  if (start) {
+    const hasTime =
+      start.getHours() !== 0 ||
+      start.getMinutes() !== 0 ||
+      start.getSeconds() !== 0;
+    parts.push(
+      hasTime
+        ? start.toLocaleString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : start.toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          }),
+    );
+  }
+  if (end) {
+    parts.push(
+      `→ ${end.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      })}`,
+    );
+  }
+  if (deadline) {
+    parts.push(
+      `deadline ${deadline.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })}`,
+    );
+  }
+  return parts.join(" ");
+}
+
+function parseNaiveLocalDate(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!match) {
+    const fallback = new Date(value);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? "0");
+  return new Date(year, month, day, hour, minute, second);
+}
 
 function fromDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -151,6 +252,20 @@ export default function TasksPage() {
     Record<string, string>
   >({});
   const [unscheduledCreateError, setUnscheduledCreateError] = useState("");
+  const [composerMode, setComposerMode] = useState<ComposerMode>("classic");
+  const [aiThreadId, setAiThreadId] = useState<string | null>(null);
+  const [aiAssistantMessage, setAiAssistantMessage] = useState("");
+  const [aiChatMessages, setAiChatMessages] = useState<
+    { role: "user" | "assistant"; content: string }[]
+  >([]);
+  const [isPlanningAi, setIsPlanningAi] = useState(false);
+  const [proposedAiTasks, setProposedAiTasks] = useState<TaskCreateInput[]>([]);
+  const [isAiConfirmOpen, setIsAiConfirmOpen] = useState(false);
+  const [isConfirmingAiTasks, setIsConfirmingAiTasks] = useState(false);
+  const [aiInputPlaceholder, setAiInputPlaceholder] = useState(
+    AI_DEFAULT_PLACEHOLDER,
+  );
+  const [aiUsageLabel, setAiUsageLabel] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const lastTaskDayTriggerRef = useRef<HTMLDivElement | null>(null);
   const hasRedirectedForAuthRef = useRef(false);
@@ -773,9 +888,81 @@ export default function TasksPage() {
     }
   }
 
+  const refreshAiUsage = useCallback(async () => {
+    try {
+      const usage = await fetchAiUsage(aiThreadId);
+      setAiUsageLabel(
+        formatAiUsageLabel({
+          ...usage,
+          threadActive: Boolean(aiThreadId),
+        }),
+      );
+    } catch (usageError) {
+      if (handleAuthError(usageError)) {
+        return;
+      }
+    }
+  }, [aiThreadId, handleAuthError]);
+
   async function handleCreateUnscheduledTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const rawInput = newUnscheduledTask;
+    if (!rawInput.trim()) {
+      return;
+    }
+
+    if (composerMode === "ai") {
+      setIsPlanningAi(true);
+      setUnscheduledCreateError("");
+      setAiAssistantMessage("");
+      setAiChatMessages((prev) => [...prev, { role: "user", content: rawInput }]);
+      setNewUnscheduledTask("");
+      try {
+        const plan = await planTasksWithAi(rawInput, aiThreadId);
+        setAiThreadId(plan.thread_id);
+        setAiUsageLabel(
+          formatAiUsageLabel({
+            unlimited: plan.unlimited,
+            remaining: plan.remaining,
+            limit: plan.limit,
+            chat_remaining: plan.chat_remaining,
+            chat_limit: plan.chat_limit,
+            threadActive: true,
+          }),
+        );
+        if (!plan.end_loop) {
+          const reply =
+            plan.assistant_message || "I need a bit more information.";
+          setAiAssistantMessage(reply);
+          setAiChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: reply },
+          ]);
+          return;
+        }
+        if (!plan.proposed_tasks.length) {
+          setUnscheduledCreateError("AI did not return any tasks to create.");
+          return;
+        }
+        setProposedAiTasks(plan.proposed_tasks);
+        setIsAiConfirmOpen(true);
+        setAiAssistantMessage("");
+      } catch (createError) {
+        if (handleAuthError(createError)) {
+          return;
+        }
+        void refreshAiUsage();
+        setUnscheduledCreateError(
+          createError instanceof Error
+            ? createError.message
+            : "Could not plan tasks with AI.",
+        );
+      } finally {
+        setIsPlanningAi(false);
+      }
+      return;
+    }
+
     const parsed = parseTaskInput(rawInput);
     if (!parsed.title) {
       return;
@@ -820,15 +1007,118 @@ export default function TasksPage() {
     }
   }
 
+  async function handleConfirmAiTasks() {
+    if (!proposedAiTasks.length) {
+      return;
+    }
+    setIsConfirmingAiTasks(true);
+    setUnscheduledCreateError("");
+    try {
+      const createdTasks: Task[] = [];
+      for (const proposed of proposedAiTasks) {
+        const created = await createTask({
+          title: proposed.title,
+          description: proposed.description ?? null,
+          location: proposed.location ?? null,
+          start_time: proposed.start_time ?? null,
+          end_time: proposed.end_time ?? null,
+          deadline: proposed.deadline ?? null,
+          completed: proposed.completed ?? false,
+          completed_at: proposed.completed_at ?? null,
+        });
+        createdTasks.push(created);
+      }
+      setTasks((prev) => [...createdTasks, ...prev]);
+      if (createdTasks[0]) {
+        setNewlyAddedTaskId(createdTasks[0].id);
+      }
+      setProposedAiTasks([]);
+      setIsAiConfirmOpen(false);
+      setAiThreadId(null);
+      setAiAssistantMessage("");
+      setAiChatMessages([]);
+      setAiInputPlaceholder(AI_DEFAULT_PLACEHOLDER);
+    } catch (createError) {
+      if (handleAuthError(createError)) {
+        return;
+      }
+      setUnscheduledCreateError(
+        createError instanceof Error
+          ? createError.message
+          : "Could not create AI tasks.",
+      );
+    } finally {
+      setIsConfirmingAiTasks(false);
+    }
+  }
+
+  function handleRejectAiConfirm() {
+    if (isConfirmingAiTasks) {
+      return;
+    }
+    setIsAiConfirmOpen(false);
+    setProposedAiTasks([]);
+    setAiInputPlaceholder("Tell whatdowhen what to change...");
+  }
+
+  function handleClearAiChat() {
+    if (isPlanningAi || isConfirmingAiTasks) {
+      return;
+    }
+    setAiChatMessages([]);
+    setAiAssistantMessage("");
+    setAiThreadId(null);
+    setProposedAiTasks([]);
+    setIsAiConfirmOpen(false);
+    setUnscheduledCreateError("");
+    setNewUnscheduledTask("");
+    setAiInputPlaceholder(AI_DEFAULT_PLACEHOLDER);
+    void (async () => {
+      try {
+        const usage = await fetchAiUsage(null);
+        setAiUsageLabel(
+          formatAiUsageLabel({
+            ...usage,
+            threadActive: false,
+          }),
+        );
+      } catch {
+        // ignore refresh failures on clear
+      }
+    })();
+  }
+
+  function handleComposerModeChange(mode: ComposerMode) {
+    setComposerMode(mode);
+    setUnscheduledCreateError("");
+    setAiAssistantMessage("");
+    setAiChatMessages([]);
+    setAiInputPlaceholder(AI_DEFAULT_PLACEHOLDER);
+    if (mode === "classic") {
+      setAiThreadId(null);
+      setProposedAiTasks([]);
+      setIsAiConfirmOpen(false);
+    } else {
+      setNewUnscheduledDescription("");
+      setNewUnscheduledLocation("");
+      setNewUnscheduledDeadline("");
+      setIsEditingUnscheduledDescription(false);
+      setIsEditingUnscheduledLocation(false);
+      setIsEditingUnscheduledDeadline(false);
+      void refreshAiUsage();
+    }
+  }
+
   const showTopComposerMeta =
-    activeComposer === "top" ||
-    newUnscheduledTask.trim() !== "" ||
-    newUnscheduledDescription.trim() !== "" ||
-    newUnscheduledLocation.trim() !== "" ||
-    newUnscheduledDeadline.trim() !== "" ||
-    isEditingUnscheduledDescription ||
-    isEditingUnscheduledLocation ||
-    isEditingUnscheduledDeadline;
+    composerMode === "classic" &&
+    (activeComposer === "top" ||
+      newUnscheduledTask.trim() !== "" ||
+      newUnscheduledDescription.trim() !== "" ||
+      newUnscheduledLocation.trim() !== "" ||
+      newUnscheduledDeadline.trim() !== "" ||
+      isEditingUnscheduledDescription ||
+      isEditingUnscheduledLocation ||
+      isEditingUnscheduledDeadline);
   const unscheduledTasks = getBucketTasks("unscheduled");
 
   function handleLogout() {
@@ -1145,138 +1435,286 @@ export default function TasksPage() {
       {!isLoading && !error && (
         <div className="tasksContainer">
           <div className="quickAddComposer">
-            <div className="quickAddTopRow">
-              <form
-                className="quickAddForm quickAddMainForm"
-                onSubmit={(event) => void handleCreateUnscheduledTask(event)}
-              >
+            <div className="composerModeRow">
+              <div className="composerModeToggle" role="group" aria-label="Task creation mode">
                 <button
-                  type="submit"
-                  className="quickAddPlus"
-                  aria-label="Add task"
-                  disabled={isCreatingUnscheduled || !newUnscheduledTask.trim()}
+                  type="button"
+                  className={`composerModeButton${composerMode === "classic" ? " active" : ""}`}
+                  onClick={() => handleComposerModeChange("classic")}
                 >
-                  +
+                  Classic
                 </button>
-                <input
-                  className="quickAddInput"
-                  value={newUnscheduledTask}
-                  onChange={(event) => setNewUnscheduledTask(event.target.value)}
-                  onFocus={() => setActiveComposer("top")}
-                  onBlur={() => {
-                    setTimeout(() => {
-                      const shouldKeepOpen =
-                        newUnscheduledTask.trim() !== "" ||
-                        newUnscheduledDescription.trim() !== "" ||
-                        newUnscheduledLocation.trim() !== "" ||
-                        newUnscheduledDeadline.trim() !== "" ||
-                        isEditingUnscheduledDescription ||
-                        isEditingUnscheduledLocation ||
-                        isEditingUnscheduledDeadline;
-                      if (!shouldKeepOpen) {
-                        setActiveComposer((prev) => (prev === "top" ? null : prev));
-                      }
-                    }, 120);
-                  }}
-                  enterKeyHint="done"
-                  placeholder="Add task"
-                />
-                {newUnscheduledTask.trim() !== "" && (
-                  <button
-                    type="submit"
-                    className="quickAddSubmit"
-                    disabled={isCreatingUnscheduled}
-                  >
-                    Add
-                  </button>
-                )}
-              </form>
-              {showTopComposerMeta && (
-                <div className="quickAddLocationSlot">
-                  <div className="quickAddMetaStack">
-                    {isEditingUnscheduledLocation || newUnscheduledLocation.trim() !== "" ? (
-                      <input
-                        className="taskMetaInlineInput quickAddMetaLocationInput"
-                        value={newUnscheduledLocation}
-                        onChange={(event) => setNewUnscheduledLocation(event.target.value)}
-                        onBlur={() => {
-                          if (!newUnscheduledLocation.trim()) {
-                            setIsEditingUnscheduledLocation(false);
-                          }
-                        }}
-                        placeholder="Add location"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="taskMetaGhostButton taskLocationGhost"
-                        onClick={() => setIsEditingUnscheduledLocation(true)}
-                      >
-                        Add location
-                      </button>
-                    )}
-                    {isEditingUnscheduledDeadline || newUnscheduledDeadline.trim() !== "" ? (
-                      <input
-                        className="taskMetaInlineInput quickAddMetaDeadlineInput"
-                        value={newUnscheduledDeadline}
-                        onChange={(event) => setNewUnscheduledDeadline(event.target.value)}
-                        onBlur={() => {
-                          if (!newUnscheduledDeadline.trim()) {
-                            setIsEditingUnscheduledDeadline(false);
-                          }
-                        }}
-                        placeholder="Set deadline"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="taskMetaGhostButton taskLocationGhost"
-                        onClick={() => setIsEditingUnscheduledDeadline(true)}
-                      >
-                        Add deadline
-                      </button>
-                    )}
-                  </div>
+                <button
+                  type="button"
+                  className={`composerModeButton${composerMode === "ai" ? " active" : ""}`}
+                  onClick={() => handleComposerModeChange("ai")}
+                >
+                  AI
+                </button>
+              </div>
+              {composerMode === "ai" && (
+                <div className="aiModeMeta">
+                  {aiUsageLabel && <span className="aiUsageLabel">{aiUsageLabel}</span>}
+                  {(aiChatMessages.length > 0 ||
+                    aiThreadId ||
+                    newUnscheduledTask.trim() !== "") && (
+                    <button
+                      type="button"
+                      className="aiChatClearButton"
+                      aria-label="Clear chat"
+                      title="Clear chat"
+                      onClick={handleClearAiChat}
+                      disabled={isPlanningAi || isConfirmingAiTasks}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-          {showTopComposerMeta && (
-            <div className="quickAddDescriptionRow">
-              {isEditingUnscheduledDescription || newUnscheduledDescription.trim() !== "" ? (
-                <textarea
-                  className="taskMetaInlineInput taskMetaInlineTextarea"
-                  value={newUnscheduledDescription}
-                  onChange={(event) => setNewUnscheduledDescription(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!newUnscheduledDescription.trim()) {
-                      setIsEditingUnscheduledDescription(false);
-                    }
-                  }}
-                  rows={2}
-                  placeholder="Add description"
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="taskMetaGhostButton"
-                  onClick={() => setIsEditingUnscheduledDescription(true)}
+
+            {composerMode === "ai" ? (
+              <div className="aiChatPanel">
+                {(aiChatMessages.length > 0 || isPlanningAi) && (
+                  <div className="aiChatThread" aria-live="polite">
+                    {aiChatMessages.map((message, index) => (
+                      <div
+                        key={`${message.role}-${index}`}
+                        className={`aiChatBubble aiChatBubble-${message.role}`}
+                      >
+                        {message.content}
+                      </div>
+                    ))}
+                    {isPlanningAi && (
+                      <div className="aiChatBubble aiChatBubble-assistant aiTypingBubble">
+                        <div className="aiTypingIndicator" aria-label="AI is thinking">
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <form
+                  className="aiChatBox"
+                  onSubmit={(event) => void handleCreateUnscheduledTask(event)}
                 >
-                  Add description
-                </button>
-              )}
-            </div>
-          )}
+                  <input
+                    className="aiChatInput"
+                    value={newUnscheduledTask}
+                    onChange={(event) => setNewUnscheduledTask(event.target.value)}
+                    onFocus={() => setActiveComposer("top")}
+                    enterKeyHint="send"
+                    placeholder={aiInputPlaceholder}
+                    disabled={isPlanningAi || isConfirmingAiTasks}
+                  />
+                  <button
+                    type="submit"
+                    className="aiChatSend"
+                    aria-label="Send"
+                    disabled={
+                      isPlanningAi ||
+                      isConfirmingAiTasks ||
+                      !newUnscheduledTask.trim()
+                    }
+                  >
+                    {isPlanningAi ? (
+                      <span className="aiChatSendSpinner" aria-hidden="true" />
+                    ) : (
+                      <span aria-hidden="true">↑</span>
+                    )}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="quickAddTopRow">
+                  <form
+                    className="quickAddForm quickAddMainForm"
+                    onSubmit={(event) => void handleCreateUnscheduledTask(event)}
+                  >
+                    <button
+                      type="submit"
+                      className="quickAddPlus"
+                      aria-label="Add task"
+                      disabled={isCreatingUnscheduled || !newUnscheduledTask.trim()}
+                    >
+                      +
+                    </button>
+                    <input
+                      className="quickAddInput"
+                      value={newUnscheduledTask}
+                      onChange={(event) => setNewUnscheduledTask(event.target.value)}
+                      onFocus={() => setActiveComposer("top")}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          const shouldKeepOpen =
+                            newUnscheduledTask.trim() !== "" ||
+                            newUnscheduledDescription.trim() !== "" ||
+                            newUnscheduledLocation.trim() !== "" ||
+                            newUnscheduledDeadline.trim() !== "" ||
+                            isEditingUnscheduledDescription ||
+                            isEditingUnscheduledLocation ||
+                            isEditingUnscheduledDeadline;
+                          if (!shouldKeepOpen) {
+                            setActiveComposer((prev) => (prev === "top" ? null : prev));
+                          }
+                        }, 120);
+                      }}
+                      enterKeyHint="done"
+                      placeholder="Add task"
+                    />
+                    {newUnscheduledTask.trim() !== "" && (
+                      <button
+                        type="submit"
+                        className="quickAddSubmit"
+                        disabled={isCreatingUnscheduled}
+                      >
+                        Add
+                      </button>
+                    )}
+                  </form>
+                  {showTopComposerMeta && (
+                    <div className="quickAddLocationSlot">
+                      <div className="quickAddMetaStack">
+                        {isEditingUnscheduledLocation || newUnscheduledLocation.trim() !== "" ? (
+                          <input
+                            className="taskMetaInlineInput quickAddMetaLocationInput"
+                            value={newUnscheduledLocation}
+                            onChange={(event) => setNewUnscheduledLocation(event.target.value)}
+                            onBlur={() => {
+                              if (!newUnscheduledLocation.trim()) {
+                                setIsEditingUnscheduledLocation(false);
+                              }
+                            }}
+                            placeholder="Add location"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="taskMetaGhostButton taskLocationGhost"
+                            onClick={() => setIsEditingUnscheduledLocation(true)}
+                          >
+                            Add location
+                          </button>
+                        )}
+                        {isEditingUnscheduledDeadline || newUnscheduledDeadline.trim() !== "" ? (
+                          <input
+                            className="taskMetaInlineInput quickAddMetaDeadlineInput"
+                            value={newUnscheduledDeadline}
+                            onChange={(event) => setNewUnscheduledDeadline(event.target.value)}
+                            onBlur={() => {
+                              if (!newUnscheduledDeadline.trim()) {
+                                setIsEditingUnscheduledDeadline(false);
+                              }
+                            }}
+                            placeholder="Set deadline"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="taskMetaGhostButton taskLocationGhost"
+                            onClick={() => setIsEditingUnscheduledDeadline(true)}
+                          >
+                            Add deadline
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {showTopComposerMeta && (
+                  <div className="quickAddDescriptionRow">
+                    {isEditingUnscheduledDescription || newUnscheduledDescription.trim() !== "" ? (
+                      <textarea
+                        className="taskMetaInlineInput taskMetaInlineTextarea"
+                        value={newUnscheduledDescription}
+                        onChange={(event) => setNewUnscheduledDescription(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newUnscheduledDescription.trim()) {
+                            setIsEditingUnscheduledDescription(false);
+                          }
+                        }}
+                        rows={2}
+                        placeholder="Add description"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="taskMetaGhostButton"
+                        onClick={() => setIsEditingUnscheduledDescription(true)}
+                      >
+                        Add description
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
           {unscheduledCreateError && (
             <p className="statusMessage error">{unscheduledCreateError}</p>
           )}
           {isCreatingUnscheduled && <p className="statusMessage">Creating task...</p>}
+
+          {isAiConfirmOpen && (
+            <div
+              className="aiConfirmOverlay"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="ai-confirm-title"
+            >
+              <div className="aiConfirmDialog">
+                <h2 id="ai-confirm-title" className="aiConfirmTitle">
+                  Confirm tasks
+                </h2>
+                <p className="aiConfirmSubtitle">
+                  Review the tasks below. Confirm to create them.
+                </p>
+                <ul className="aiConfirmList">
+                  {proposedAiTasks.map((task, index) => (
+                    <li key={`${task.title}-${index}`} className="aiConfirmItem">
+                      <div className="aiConfirmItemTitle">{task.title}</div>
+                      <div className="aiConfirmItemWhen">
+                        {formatProposedTaskWhen(task)}
+                      </div>
+                      {task.location ? (
+                        <div className="aiConfirmItemMeta">{task.location}</div>
+                      ) : null}
+                      {task.description ? (
+                        <div className="aiConfirmItemMeta">{task.description}</div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                <div className="aiConfirmActions">
+                  <button
+                    type="button"
+                    className="aiConfirmCancel"
+                    onClick={handleRejectAiConfirm}
+                    disabled={isConfirmingAiTasks}
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    className="aiConfirmSubmit"
+                    onClick={() => void handleConfirmAiTasks()}
+                    disabled={isConfirmingAiTasks}
+                  >
+                    {isConfirmingAiTasks ? "Creating..." : "Confirm"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <DateSection
             label="Unscheduled"

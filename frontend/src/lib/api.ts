@@ -196,6 +196,105 @@ export async function createTask(payload: TaskCreateInput): Promise<Task> {
   return (await response.json()) as Task;
 }
 
+export type AITaskPlanResponse = {
+  end_loop: boolean;
+  assistant_message: string;
+  thread_id: string;
+  proposed_tasks: TaskCreateInput[];
+  unlimited: boolean;
+  limit: number;
+  used: number;
+  remaining: number | null;
+  chat_limit: number;
+  chat_used: number;
+  chat_remaining: number | null;
+};
+
+export type AIUsageStatus = {
+  unlimited: boolean;
+  limit: number;
+  used: number;
+  remaining: number | null;
+  chat_limit: number;
+  chat_used: number;
+  chat_remaining: number | null;
+  enabled: boolean;
+};
+
+export async function fetchAiUsage(threadId?: string | null): Promise<AIUsageStatus> {
+  const query = threadId ? `?thread_id=${encodeURIComponent(threadId)}` : "";
+  const response = await fetch(`${getApiBaseUrl()}/ai/usage${query}`, {
+    method: "GET",
+    headers: buildHeaders("application/json"),
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    clearAuthToken();
+    throw new AuthExpiredError();
+  }
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as
+      | { detail?: unknown }
+      | null;
+    throw new Error(parseErrorDetail(errorBody?.detail));
+  }
+
+  return (await response.json()) as AIUsageStatus;
+}
+
+export async function planTasksWithAi(
+  message: string,
+  threadId?: string | null,
+): Promise<AITaskPlanResponse> {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const response = await fetch(`${getApiBaseUrl()}/ai/tasks`, {
+    method: "POST",
+    headers: buildHeaders("application/json"),
+    body: JSON.stringify({
+      message,
+      thread_id: threadId || null,
+      timezone,
+    }),
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    clearAuthToken();
+    throw new AuthExpiredError();
+  }
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as
+      | { detail?: unknown }
+      | null;
+    throw new Error(parseErrorDetail(errorBody?.detail));
+  }
+
+  const payload = (await response.json()) as AITaskPlanResponse;
+  return {
+    ...payload,
+    proposed_tasks: payload.proposed_tasks.map(normalizeProposedTaskDatetimes),
+  };
+}
+
+function normalizeProposedTaskDatetimes(task: TaskCreateInput): TaskCreateInput {
+  return {
+    ...task,
+    start_time: asNaiveLocalDateTime(task.start_time),
+    end_time: asNaiveLocalDateTime(task.end_time),
+    deadline: asNaiveLocalDateTime(task.deadline),
+    completed_at: asNaiveLocalDateTime(task.completed_at),
+  };
+}
+
+function asNaiveLocalDateTime(value?: string | null) {
+  if (!value) {
+    return value ?? null;
+  }
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/.exec(value);
+  return match ? match[1] : value;
+}
+
 export async function deleteTask(taskId: number): Promise<void> {
   const response = await fetch(`${getApiBaseUrl()}/tasks/${taskId}`, {
     method: "DELETE",

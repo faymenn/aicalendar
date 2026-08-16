@@ -11,8 +11,20 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-    
-    model_config = SettingsConfigDict(env_file=".env")
+    AI_ENABLED: bool = True
+    AI_DAILY_REQUEST_LIMIT: int = 3
+    AI_CHAT_REPLY_LIMIT: int = 10
+    AI_UNLIMITED_EMAILS: str = "aymenshamoon@gmail.com,test@gmail.com"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def ai_unlimited_emails(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.AI_UNLIMITED_EMAILS.split(",")
+            if email.strip()
+        }
 
 settings = Settings()
 
