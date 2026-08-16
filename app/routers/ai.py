@@ -9,9 +9,14 @@ from ..ai_usage import (
 )
 from ..database import get_db
 from ..routers.auth import get_current_user
-from ai import run_agent
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+def _run_agent(message: str, thread_id: str | None = None, timezone: str | None = None):
+    from ai import run_agent
+
+    return run_agent(message, thread_id=thread_id, timezone=timezone)
 
 
 def _is_out_of_credits_error(error: Exception) -> bool:
@@ -47,7 +52,7 @@ def ai_plan_tasks(
     usage = enforce_ai_usage_limit(db, current_user, payload.thread_id)
 
     try:
-        result = run_agent(
+        result = _run_agent(
             payload.message,
             thread_id=payload.thread_id,
             timezone=payload.timezone,
